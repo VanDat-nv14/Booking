@@ -1,0 +1,19 @@
+# IDEs
+.idea
+.vscode
+*.iml
+
+# Logs
+*.log
+logs/
+
+# Secrets
+.env
+.env.*
+!*.example
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db

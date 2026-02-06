@@ -17,8 +17,15 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-    // 256-bit key for HS256 (32 bytes). This is a sample key.
-    private static final String SECRET_KEY = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970";
+    @org.springframework.beans.factory.annotation.Value("${application.security.jwt.secret-key}")
+    private String secretKey;
+
+    private Key getSignInKey() {
+        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+    
+    // private static final String SECRET_KEY = ... (Removed)
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
@@ -64,8 +71,5 @@ public class JwtService {
                 .getBody();
     }
 
-    private Key getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);
-        return Keys.hmacShaKeyFor(keyBytes);
-    }
+
 }
