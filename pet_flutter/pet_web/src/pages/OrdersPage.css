@@ -1,0 +1,3 @@
+/* Styling is now moved into styled-components directly in the OrdersPage.js file */
+/* This file can be empty as we're using styled-components for all styling */
+/* Keep the file to prevent import errors */

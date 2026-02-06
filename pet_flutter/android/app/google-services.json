@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "290984385475",
+    "firebase_url": "https://fluttermobile1178-default-rtdb.firebaseio.com",
+    "project_id": "fluttermobile1178",
+    "storage_bucket": "fluttermobile1178.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:290984385475:android:aa064c050b76237f243b76",
+        "android_client_info": {
+          "package_name": "com.example.pet_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAetSu6pmfJV3X2QGvmRVdfOVoPZFbkv58"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

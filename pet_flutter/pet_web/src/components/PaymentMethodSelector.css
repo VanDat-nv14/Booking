@@ -1,0 +1,149 @@
+/* Payment Method Styles */
+.payment-method-selector {
+  width: 100%;
+}
+
+.payment-method-card {
+  margin-bottom: 12px;
+  border-radius: 8px;
+  transition: all 0.3s;
+  border: 1px solid #f0f0f0;
+}
+
+.payment-method-card:hover {
+  border-color: #1890ff;
+}
+
+.payment-method-card.selected {
+  border-color: #1890ff;
+  background-color: #e6f7ff;
+}
+
+.payment-method-card .ant-card-body {
+  padding: 16px;
+}
+
+.payment-option {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+  transition: all 0.3s ease;
+}
+
+.payment-option:hover {
+  background: #f0f7ff;
+  border-color: #91caff;
+}
+
+.payment-option-content {
+  margin-left: 8px;
+}
+
+.payment-option-title {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.payment-icon {
+  font-size: 24px;
+  margin-right: 12px;
+}
+
+.cod-icon {
+  color: #faad14;
+}
+
+.banking-icon {
+  color: #1890ff;
+}
+
+.momo-icon {
+  color: #eb2f96;
+}
+
+.payment-option-desc {
+  margin-left: 28px;
+  font-size: 13px;
+}
+
+.payment-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.payment-method-card .ant-radio {
+  margin-right: 8px;
+}
+
+.ant-radio-wrapper {
+  width: 100%;
+}
+
+.payment-details {
+  margin-top: 8px;
+  margin-left: 32px;
+}
+
+.bank-info, .momo-info {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+}
+
+.qr-image {
+  max-width: 150px;
+  height: auto;
+  margin: 0 auto 16px;
+  display: block;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: #262626;
+}
+
+.card-title-icon {
+  margin-right: 10px;
+  font-size: 18px;
+  color: #1890ff;
+}
+
+/* Custom styles for specific elements */
+.ant-collapse-ghost .ant-collapse-content {
+  background-color: transparent;
+}
+
+.ant-collapse-header {
+  font-weight: 500;
+}
+
+.ant-list-item-meta-title {
+  color: #8c8c8c;
+  font-size: 13px;
+}
+
+.ant-list-item-meta-description {
+  color: #262626;
+  font-weight: 500;
+}
+
+/* Responsive styles */
+@media (max-width: 576px) {
+  .payment-option {
+    padding: 12px;
+  }
+
+  .payment-icon {
+    font-size: 18px;
+  }
+
+  .payment-option-desc {
+    font-size: 12px;
+  }
+}
