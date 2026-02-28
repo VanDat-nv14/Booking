@@ -1,10 +1,14 @@
 package com.example.bookingkhachsan.controller;
 
 import com.example.bookingkhachsan.dto.AuthDto;
+import com.example.bookingkhachsan.entity.NguoiDung;
 import com.example.bookingkhachsan.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
 
 @RestController
 @RequestMapping("/api/auth")
@@ -23,22 +27,42 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthDto.AuthResponse> login(
-            @RequestBody AuthDto.LoginRequest request
+            @jakarta.validation.Valid @RequestBody AuthDto.LoginRequest request
     ) {
         return ResponseEntity.ok(service.login(request));
     }
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<String> forgotPassword(@RequestBody AuthDto.ForgotPasswordRequest request) {
+    public ResponseEntity<String> forgotPassword(@jakarta.validation.Valid @RequestBody AuthDto.ForgotPasswordRequest request) {
         service.forgotPassword(request);
         return ResponseEntity.ok("Password reset link sent to your email");
     }
 
     @PostMapping("/reset-password")
-    public ResponseEntity<String> resetPassword(@RequestBody AuthDto.ResetPasswordRequest request) {
+    public ResponseEntity<String> resetPassword(@jakarta.validation.Valid @RequestBody AuthDto.ResetPasswordRequest request) {
         service.resetPassword(request);
         return ResponseEntity.ok("Password reset successfully");
     }
+
+    /**
+     * Lay thong tin user hien tai dang dang nhap tu JWT token.
+     * Frontend goi GET /api/auth/me voi Authorization header de kiem tra session.
+     */
+    @GetMapping("/me")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<AuthDto.AuthResponse> getCurrentUser(@AuthenticationPrincipal NguoiDung currentUser) {
+        if (currentUser == null) {
+            return ResponseEntity.status(401).build();
+        }
+        AuthDto.AuthResponse response = AuthDto.AuthResponse.builder()
+                .role(currentUser.getChucVu())
+                .hoTen(currentUser.getHoTen())
+                .userId(currentUser.getId())
+                .email(currentUser.getEmail())
+                .build();
+        return ResponseEntity.ok(response);
+    }
+
 
     @GetMapping("/oauth2/success")
     public ResponseEntity<Void> oauth2Success(org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken token, jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {

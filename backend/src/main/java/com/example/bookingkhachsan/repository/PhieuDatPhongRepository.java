@@ -2,7 +2,6 @@ package com.example.bookingkhachsan.repository;
 
 import com.example.bookingkhachsan.entity.PhieuDatPhong;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -13,18 +12,27 @@ import java.util.Optional;
 
 @Repository
 public interface PhieuDatPhongRepository extends JpaRepository<PhieuDatPhong, Integer> {
-    Optional<PhieuDatPhong> findByMaDatPhong(String maDatPhong);
-    List<PhieuDatPhong> findByNguoiDungId(Integer nguoiDungId);
-    
-    @Modifying
-    @Query(value = "EXEC sp_ThanhToanCuoiKy @pdp_id = :pdpId", nativeQuery = true)
-    void checkout(@Param("pdpId") Integer pdpId);
 
-    @Query("SELECT COUNT(pdp) FROM PhieuDatPhong pdp " +
-           "WHERE pdp.phong.id = :phongId " +
-           "AND pdp.trangThai NOT IN ('Đã hủy', 'Đã checkout') " +
-           "AND (pdp.ngayDen < :checkOut AND pdp.ngayDi > :checkIn)")
-    long countOverlappingBookings(@Param("phongId") Integer phongId, 
-                                  @Param("checkIn") LocalDate checkIn, 
-                                  @Param("checkOut") LocalDate checkOut);
+    Optional<PhieuDatPhong> findByMaDatPhong(String maDatPhong);
+
+    List<PhieuDatPhong> findByNguoiDungId(Integer nguoiDungId);
+
+    List<PhieuDatPhong> findByPhong_KhachSan_IdOrderByNgayDatDesc(Integer khachSanId);
+
+    List<PhieuDatPhong> findByTrangThaiOrderByNgayDatDesc(String trangThai);
+
+    /**
+     * Dem so booking trung ngay (dung cho fallback check, chinh la phong_kha_dung)
+     */
+    @Query("""
+        SELECT COUNT(pdp) FROM PhieuDatPhong pdp
+        WHERE pdp.phong.id = :phongId
+          AND pdp.trangThai NOT IN ('Cancelled', 'Expired', 'Rejected', 'NoShow')
+          AND (pdp.ngayDen < :checkOut AND pdp.ngayDi > :checkIn)
+        """)
+    long countOverlappingBookings(
+            @Param("phongId") Integer phongId,
+            @Param("checkIn") LocalDate checkIn,
+            @Param("checkOut") LocalDate checkOut
+    );
 }

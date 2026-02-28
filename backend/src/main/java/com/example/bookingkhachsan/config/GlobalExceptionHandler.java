@@ -28,11 +28,25 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
     @ExceptionHandler(org.springframework.web.bind.MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, String>> handleValidationExceptions(org.springframework.web.bind.MethodArgumentNotValidException ex) {
-        Map<String, String> error = new HashMap<>();
-        // Get the first error message
-        String errorMessage = ex.getBindingResult().getAllErrors().get(0).getDefaultMessage();
-        error.put("error", errorMessage);
-        return ResponseEntity.badRequest().body(error);
+    public ResponseEntity<Map<String, Object>> handleValidationExceptions(org.springframework.web.bind.MethodArgumentNotValidException ex) {
+        Map<String, Object> response = new HashMap<>();
+        Map<String, String> errors = new HashMap<>();
+        
+        // Collect all field errors
+        ex.getBindingResult().getFieldErrors().forEach(error -> {
+            errors.put(error.getField(), error.getDefaultMessage());
+        });
+        
+        // If there are field errors, return them
+        if (!errors.isEmpty()) {
+            response.put("errors", errors);
+            // Also include the first error message for convenience
+            response.put("error", ex.getBindingResult().getAllErrors().get(0).getDefaultMessage());
+        } else {
+            // If no field errors, just return the first error message
+            response.put("error", ex.getBindingResult().getAllErrors().get(0).getDefaultMessage());
+        }
+        
+        return ResponseEntity.badRequest().body(response);
     }
 }

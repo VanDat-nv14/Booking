@@ -36,5 +36,15 @@ public class Phong {
     private KhuyenMai khuyenMai;
 
     @Column(name = "trang_thai")
-    private String trangThai; // Trống
+    private String trangThai = "Trong";
+
+    // === Mo rong: vi tri cu the ===
+    @Column(name = "tang")
+    private Integer tang;         // So tang (1, 2, 3...)
+
+    @Column(name = "so_phong", length = 20)
+    private String soPhong;       // Ma phong: "101", "202A"
+
+    @Column(name = "mo_ta", columnDefinition = "NVARCHAR(MAX)")
+    private String moTa;
 }

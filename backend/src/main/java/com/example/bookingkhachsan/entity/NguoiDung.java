@@ -58,7 +58,9 @@ public class NguoiDung implements UserDetails {
     // UserDetails methods
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + (chucVu != null ? chucVu.toUpperCase() : "USER")));
+        // Giữ nguyên giá trị chucVu (Admin, HotelManager, User) không toUpperCase
+        // để SecurityConfiguration.hasAuthority("ROLE_HotelManager") khớp đúng
+        return List.of(new SimpleGrantedAuthority("ROLE_" + (chucVu != null ? chucVu : "User")));
     }
 
     @Override
@@ -78,7 +80,8 @@ public class NguoiDung implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
-        return true;
+        // Tài khoản bị khóa khi trangThai = false
+        return Boolean.TRUE.equals(trangThai);
     }
 
     @Override
