@@ -64,4 +64,4 @@ Dựa trên hiện trạng dự án và chuẩn mực của một nền tảng O
 
 ### 2.7 Bộ Lọc Nâng Cao & Gợi Ý Thông Minh (Advanced Filters & Recommendations)
 - Tính năng lọc theo các tiện nghi (Có hồ bơi, buffet sáng, cho phép mang thú cưng).
-- Hệ thống Recommendation (gợi ý): "Khách sạn tương tự", "Được yêu thích nhất trong tuần", "Đề xuất theo hành vi đặt phòng cũ".
+- Hệ thống Recommendation (gợi ý): "Khách sạn tương tự", "Được yêu thích nhất trong tuần", "Đề xuất theo hành vi đặt phòng cũ"
