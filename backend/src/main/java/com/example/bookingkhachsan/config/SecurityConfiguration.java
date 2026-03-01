@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -17,6 +18,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity   // Cho phep dung @PreAuthorize, @Secured tren controller
 @RequiredArgsConstructor
 public class SecurityConfiguration {
 
@@ -29,9 +31,26 @@ public class SecurityConfiguration {
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/", "/api/auth/**", "/api/locations/**", "/api/hotels/**",
-                        "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error").permitAll() // Public endpoints
-                .requestMatchers("/api/admin/**").hasRole("ADMIN") // Only Admin access
+                // --- Public endpoints ---
+                .requestMatchers("/", "/api/auth/**", "/api/locations/**",
+                        "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/hotels/**", "/api/room-types/**").permitAll()
+
+
+                // --- Admin only ---
+                // Dung hasAuthority("ROLE_Admin") thay vi hasRole("ADMIN")
+                // vi chucVu trong DB la "Admin" -> getAuthorities() tao ra "ROLE_Admin"
+                .requestMatchers("/api/admin/**").hasAuthority("ROLE_Admin")
+
+                // --- Hotel Manager + Admin ---
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/hotels/**")
+                    .hasAnyAuthority("ROLE_Admin", "ROLE_HotelManager")
+                .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/hotels/**")
+                    .hasAnyAuthority("ROLE_Admin", "ROLE_HotelManager")
+                .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/hotels/**")
+                    .hasAnyAuthority("ROLE_Admin", "ROLE_HotelManager")
+
+                // --- Moi request con lai phai dang nhap ---
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -47,7 +66,7 @@ public class SecurityConfiguration {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:5174")); // Frontend URL
+        configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:5174"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

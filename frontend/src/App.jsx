@@ -15,6 +15,7 @@ import { AuthProvider } from './context/AuthContext';
 import UserProfilePage from './pages/UserProfilePage';
 import SearchPage from './pages/SearchPage';
 import HotelDetailPage from './pages/HotelDetailPage';
+import HotelMapPage from './pages/HotelMapPage';
 
 // const HotelDetailPage = Placeholder; // Removed
 const BookingPage = Placeholder; // Keeping generic booking page placeholder if needed, mostly covered by Detail
@@ -41,12 +42,14 @@ function App() {
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
               </Route>
               
-               <Route element={<PrivateRoute allowedRoles={['HOTEL_MANAGER', 'HotelManager']} />}>
+              <Route element={<PrivateRoute allowedRoles={['HOTEL_MANAGER', 'HotelManager']} />}>
                 <Route path="/manager/dashboard" element={<ManagerDashboard />} />
               </Route>
+              
+              <Route path="/hotels/map" element={<HotelMapPage />} />
+              <Route path="/hotels/:id" element={<HotelDetailPage />} />
 
               <Route element={<PrivateRoute />}>
-                  <Route path="/hotels/:id" element={<HotelDetailPage />} />
                   <Route path="/booking" element={<BookingPage />} />
                    <Route path="/user/profile" element={<UserProfilePage />} />
               </Route>

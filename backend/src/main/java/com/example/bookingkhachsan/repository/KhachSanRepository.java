@@ -10,8 +10,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import java.util.Optional;
+
 @Repository
 public interface KhachSanRepository extends JpaRepository<KhachSan, Integer> {
+    
+    Optional<KhachSan> findByNguoiQuanLy_Id(Integer managerId);
     
     // Simple search by location and stars
     List<KhachSan> findByViTriId(Integer viTriId);

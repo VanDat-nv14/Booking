@@ -10,20 +10,16 @@ const Navbar = () => {
         navigate('/login');
     };
 
+    const homeRoute = user?.role === 'ADMIN' || user?.role === 'Admin' ? '/admin/dashboard' : user?.role === 'HOTEL_MANAGER' || user?.role === 'HotelManager' ? '/manager/dashboard' : '/';
+
     return (
         <nav className="bg-white shadow-md sticky top-0 z-50">
             <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-                <Link to="/" className="text-xl font-bold text-blue-600">
+                <Link to={homeRoute} className="text-xl font-bold text-blue-600">
                     BookingKhachSan
                 </Link>
                 <div className="space-x-4">
-                    <Link to="/" className="hover:text-blue-600">Trang chủ</Link>
-                    {user?.role === 'ADMIN' && (
-                         <Link to="/admin/dashboard" className="hover:text-blue-600 font-semibold text-red-500">Admin</Link>
-                    )}
-                    {user?.role === 'HOTEL_MANAGER' && (
-                         <Link to="/manager/dashboard" className="hover:text-blue-600 font-semibold text-green-500">Manager</Link>
-                    )}
+                    <Link to={homeRoute} className="hover:text-blue-600">Trang chủ</Link>
                     {!token ? (
                         <>
                             <Link to="/login" className="hover:text-blue-600">Đăng nhập</Link>
@@ -31,7 +27,7 @@ const Navbar = () => {
                         </>
                     ) : (
                         <>
-                            <Link to="/profile" className="hover:text-blue-600">Cá nhân</Link>
+                            <Link to="/user/profile" className="hover:text-blue-600">Cá nhân</Link>
                             <button onClick={handleLogout} className="text-red-500 hover:text-red-700">Đăng xuất</button>
                         </>
                     )}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
+import { useAuth } from '../context/AuthContext';
 
 const RegisterPage = () => {
     const [formData, setFormData] = useState({
@@ -10,7 +11,9 @@ const RegisterPage = () => {
         sdt: ''
     });
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const { login } = useAuth();
 
     const handleChange = (e) => {
         setFormData({
@@ -21,43 +24,55 @@ const RegisterPage = () => {
 
     const validateForm = () => {
         const { email, matKhau, sdt } = formData;
-        // Email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) return "Email không hợp lệ";
-
-        // Password validation (min 6 chars)
         if (matKhau.length < 6) return "Mật khẩu phải có ít nhất 6 ký tự";
-
-        // Phone validation (exactly 9 digits)
         const phoneRegex = /^\d{9}$/;
         if (!phoneRegex.test(sdt)) return "Số điện thoại phải có đúng 9 số";
-
         return null;
     };
 
     const handleRegister = async (e) => {
         e.preventDefault();
         setError('');
-        
+
         const validationError = validateForm();
         if (validationError) {
             setError(validationError);
             return;
         }
 
+        setLoading(true);
         try {
-            await axiosClient.post('/auth/register', formData);
-            alert("Đăng ký thành công! Vui lòng đăng nhập.");
-            navigate('/login');
+            // Dang ky va nhan lai token tu server
+            const response = await axiosClient.post('/auth/register', formData);
+            const { token, role, hoTen, userId, email } = response.data;
+
+            // Tu dong dang nhap - khong can user phai login lai
+            login(token, role, hoTen, userId, email);
+
+            // Redirect theo role
+            if (role === 'Admin') {
+                navigate('/admin/dashboard');
+            } else if (role === 'HotelManager') {
+                navigate('/manager/dashboard');
+            } else {
+                navigate('/');
+            }
         } catch (err) {
             console.error(err);
             if (err.response && err.response.data && err.response.data.error) {
                 setError(err.response.data.error);
+            } else if (err.response && err.response.data && err.response.data.message) {
+                setError(err.response.data.message);
             } else {
                 setError('Đăng ký thất bại. Vui lòng thử lại.');
             }
+        } finally {
+            setLoading(false);
         }
     };
+
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -139,9 +154,10 @@ const RegisterPage = () => {
                         
                         <button 
                             type="submit" 
-                            className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 focus:ring-4 focus:ring-green-200 transition-all duration-200 shadow-md hover:shadow-lg mt-4"
+                            disabled={loading}
+                            className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 focus:ring-4 focus:ring-green-200 transition-all duration-200 shadow-md hover:shadow-lg mt-4 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            Đăng Ký
+                            {loading ? 'Đang xử lý...' : 'Đăng Ký'}
                         </button>
                     </form>
 

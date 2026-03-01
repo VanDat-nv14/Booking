@@ -15,9 +15,15 @@ const AuthCallback = () => {
         const email = searchParams.get('email');   // Ensure backend sends this in redirectUrl
 
         if (token) {
-            login(token, decodeURIComponent(role || ''), decodeURIComponent(hoTen || ''), userId, email);
+            const decodedRole = decodeURIComponent(role || '');
+            login(token, decodedRole, decodeURIComponent(hoTen || ''), userId, email);
             alert("Đăng nhập thành công!");
-            navigate('/');
+            
+            let dest = '/';
+            if (decodedRole === 'ADMIN' || decodedRole === 'Admin') dest = '/admin/dashboard';
+            else if (decodedRole === 'HOTEL_MANAGER' || decodedRole === 'HotelManager') dest = '/manager/dashboard';
+            
+            navigate(dest);
         } else {
             navigate('/login');
         }
