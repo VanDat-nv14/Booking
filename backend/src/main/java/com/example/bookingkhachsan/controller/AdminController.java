@@ -54,6 +54,12 @@ public class AdminController {
         return ResponseEntity.ok(repository.findAll());
     }
 
+    // ── GET all bookings ─────────────────────────
+    @GetMapping("/bookings")
+    public ResponseEntity<List<com.example.bookingkhachsan.entity.PhieuDatPhong>> getAllBookings() {
+        return ResponseEntity.ok(bookingRepository.findAllByOrderByNgayDatDesc());
+    }
+
     // ── GET user by id ───────────────────────────
     @GetMapping("/users/{id}")
     public ResponseEntity<NguoiDung> getUserById(@PathVariable Integer id) {

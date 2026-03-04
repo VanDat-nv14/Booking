@@ -15,9 +15,12 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +35,7 @@ public class BookingService {
     private final PhuThuRepository phuThuRepo;
     private final PhongKhaDungRepository phongKhaDungRepo;
     private final LichSuThanhToanRepository lichSuRepo;
+    private final JdbcTemplate jdbcTemplate;
 
     // Hoa hong mac dinh 5% neu la mo hinh san
     private static final BigDecimal COMMISSION_RATE = new BigDecimal("0.05");
@@ -65,6 +69,14 @@ public class BookingService {
         return phongs.stream().map(phong -> {
             LoaiPhong lp = phong.getLoaiPhong();
             BigDecimal giaTien = tinhGiaDong(phong.getGiaTien(), lp, checkIn, checkOut);
+            BigDecimal tongTien = giaTien.multiply(BigDecimal.valueOf(soNgay));
+            // Doc ti le coc tu khach san
+            BigDecimal tiLeCoc = BigDecimal.ZERO;
+            if (phong.getKhachSan() != null && phong.getKhachSan().getTiLeCoc() != null) {
+                tiLeCoc = phong.getKhachSan().getTiLeCoc();
+            }
+            BigDecimal tienCocDuTinh = tongTien.multiply(tiLeCoc)
+                    .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
             return BookingDto.AvailableRoomResponse.builder()
                     .phongId(phong.getId())
                     .tenPhong(phong.getTen())
@@ -85,7 +97,9 @@ public class BookingService {
                     .mienPhiHuyTruocGio(lp.getMienPhiHuyTruocGio())
                     .phiHuyPct(lp.getPhiHuyPct())
                     .soNgay((int) soNgay)
-                    .tongTienDuTinh(giaTien.multiply(BigDecimal.valueOf(soNgay)))
+                    .tongTienDuTinh(tongTien)
+                    .tiLeCocKhachSan(tiLeCoc)
+                    .tienCocDuTinh(tienCocDuTinh)
                     .build();
         }).collect(Collectors.toList());
     }
@@ -144,8 +158,10 @@ public class BookingService {
                 request.getNgayDen(), request.getNgayDi());
         BigDecimal thanhTien = giaDong.multiply(BigDecimal.valueOf(soNgay));
 
-        // Tao phieu dat phong (Trigger se sinh maDatPhong + pendingExpiresAt)
+        // Tao phieu dat phong
         PhieuDatPhong booking = new PhieuDatPhong();
+        // Sinh ma dat phong trong Java de tranh loi "null identifier" tren SQL Server + trigger
+        booking.setMaDatPhong(sinhMaDatPhong());
         booking.setNgayDen(request.getNgayDen());
         booking.setNgayDi(request.getNgayDi());
         booking.setPhong(phong);
@@ -161,17 +177,71 @@ public class BookingService {
         booking.setGhiChuKhach(request.getGhiChuKhach());
         booking.setPendingExpiresAt(LocalDateTime.now().plusMinutes(30));
 
-        booking = bookingRepo.save(booking);
+
+        // Tinh tien coc dua tren ti le coc cua khach san
+        BigDecimal tiLeCoc = BigDecimal.ZERO;
+        if (phong.getKhachSan() != null && phong.getKhachSan().getTiLeCoc() != null) {
+            tiLeCoc = phong.getKhachSan().getTiLeCoc();
+        }
+        BigDecimal tienCoc = thanhTien.multiply(tiLeCoc)
+                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
+        booking.setTienCoc(tienCoc);
+        booking.setTrangThaiCoc("ChuaCoc");
+
+        // ================================================================
+        // BYPASS Hibernate save() de tranh loi "null identifier" tren
+        // SQL Server khi bang co INSTEAD OF INSERT trigger.
+        // Dung raw JDBC INSERT, sau do SELECT id theo ma_dat_phong.
+        // ================================================================
+        String maDatPhong = booking.getMaDatPhong();
+        jdbcTemplate.update(
+                "INSERT INTO phieu_dat_phong (" +
+                "  ma_dat_phong, ngay_den, ngay_di, nguoi_dung_id, phong_id," +
+                "  gia_phong_goc, thanh_tien, trang_thai, trang_thai_thanh_toan," +
+                "  loai_dat_phong, phuong_thuc_thanh_toan, so_nguoi_lon, so_tre_em," +
+                "  ghi_chu_khach, pending_expires_at, tien_coc, trang_thai_coc" +
+                ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                maDatPhong,
+                booking.getNgayDen(),
+                booking.getNgayDi(),
+                booking.getNguoiDung().getId(),
+                booking.getPhong().getId(),
+                booking.getGiaPhongGoc(),
+                booking.getThanhTien(),
+                booking.getTrangThai(),
+                booking.getTrangThaiThanhToan(),
+                booking.getLoaiDatPhong(),
+                booking.getPhuongThucThanhToan(),
+                booking.getSoNguoiLon(),
+                booking.getSoTreEm(),
+                booking.getGhiChuKhach(),
+                booking.getPendingExpiresAt(),
+                booking.getTienCoc(),
+                booking.getTrangThaiCoc()
+        );
+
+        // Lay ID vua duoc INSERT. Dung @@IDENTITY de lay ID bat ke trigger co INSTEAD OF hay khong.
+        // @@IDENTITY tra ve identity cuoi cung duoc sinh trong session hien tai (bao gom ca trigger).
+        Integer newId = jdbcTemplate.queryForObject(
+                "SELECT CAST(@@IDENTITY AS INT)",
+                Integer.class);
+        if (newId == null) {
+            throw new RuntimeException("Loi he thong: Khong the lay ID phieu dat phong!");
+        }
+
+        // Load entity vao JPA context bang findById
+        PhieuDatPhong savedBooking = bookingRepo.findById(newId)
+                .orElseThrow(() -> new RuntimeException("Loi he thong: Khong tim thay phieu sau khi tao!"));
 
         // Giu phong tam thoi (TamGiu) cho tat ca ngay trong khoang dat
-        initPhongKhaDung(phong, booking, request.getNgayDen(), request.getNgayDi(), giaDong);
+        initPhongKhaDung(phong, savedBooking, request.getNgayDen(), request.getNgayDi(), giaDong);
 
         // Neu dat ngay (InstantBooking): tu dong confirm
         if ("InstantBooking".equals(request.getLoaiDatPhong())) {
-            booking = doConfirm(booking);
+            savedBooking = doConfirm(savedBooking);
         }
 
-        return toBookingResponse(booking);
+        return toBookingResponse(savedBooking);
     }
 
     /** Tao bản ghi phong_kha_dung theo tung ngay trong khoang dat */
@@ -457,17 +527,25 @@ public class BookingService {
         phuThuRepo.save(pt);
     }
 
+    public PhieuDatPhong getBookingById(Integer id) {
+        return findBookingById(id);
+    }
+
     public PhieuDatPhong getBookingByCode(String code) {
         return bookingRepo.findByMaDatPhong(code)
                 .orElseThrow(() -> new RuntimeException("Khong tim thay phieu dat phong: " + code));
     }
 
-    public List<PhieuDatPhong> getBookingsByUser(Integer userId) {
-        return bookingRepo.findByNguoiDungId(userId);
+    @Transactional(readOnly = true)
+    public List<BookingDto.BookingResponse> getBookingsByUser(Integer userId) {
+        return bookingRepo.findByNguoiDungId(userId)
+                .stream().map(this::toBookingResponse).collect(Collectors.toList());
     }
 
-    public List<PhieuDatPhong> getBookingsByHotel(Integer hotelId) {
-        return bookingRepo.findByPhong_KhachSan_IdOrderByNgayDatDesc(hotelId);
+    @Transactional(readOnly = true)
+    public List<BookingDto.BookingResponse> getBookingsByHotel(Integer hotelId) {
+        return bookingRepo.findByPhong_KhachSan_IdOrderByNgayDatDesc(hotelId)
+                .stream().map(this::toBookingResponse).collect(Collectors.toList());
     }
 
     public List<BookingDto.PaymentHistoryResponse> getPaymentHistory(Integer bookingId) {
@@ -550,10 +628,21 @@ public class BookingService {
                 .giaPhongGoc(b.getGiaPhongGoc())
                 .thanhTien(b.getThanhTien())
                 .phuongThucThanhToan(b.getPhuongThucThanhToan())
+                .tienCoc(b.getTienCoc())
+                .trangThaiCoc(b.getTrangThaiCoc())
                 .loaiDatPhong(b.getLoaiDatPhong())
                 .pendingExpiresAt(b.getPendingExpiresAt())
                 .ngayDat(b.getNgayDat())
                 .ghiChuKhach(b.getGhiChuKhach())
                 .build();
+    }
+    /**
+     * Sinh ma dat phong theo format BKyyyyMMddXXXX.
+     * Dung de thay the trigger SQL Server, tranh loi "null identifier".
+     */
+    private String sinhMaDatPhong() {
+        String datePart = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String randPart = UUID.randomUUID().toString().replace("-", "").substring(0, 4).toUpperCase();
+        return "BK" + datePart + randPart;
     }
 }

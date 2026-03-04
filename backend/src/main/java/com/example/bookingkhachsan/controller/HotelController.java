@@ -82,6 +82,32 @@ public class HotelController {
         }
     }
 
+    /**
+     * PUT /api/hotels/{id}/settings — HotelManager updates their hotel's deposit % and check-in/out time.
+     * Verifies caller is the nguoiQuanLy of this hotel.
+     */
+    @PutMapping("/{id}/settings")
+    @PreAuthorize("hasAnyAuthority('ROLE_Admin', 'ROLE_HotelManager')")
+    public ResponseEntity<?> updateHotelSettings(
+            @PathVariable Integer id,
+            @RequestBody com.example.bookingkhachsan.dto.HotelDto dto,
+            @AuthenticationPrincipal NguoiDung currentUser) {
+        try {
+            KhachSan hotel = service.getDetails(id);
+            if (hotel == null) return ResponseEntity.notFound().build();
+            // Permission check: only Admin or the assigned manager can update
+            boolean isAdmin = "Admin".equals(currentUser.getChucVu());
+            boolean isManager = hotel.getNguoiQuanLy() != null
+                    && hotel.getNguoiQuanLy().getId().equals(currentUser.getId());
+            if (!isAdmin && !isManager) {
+                return ResponseEntity.status(403).body(java.util.Map.of("error", "Bạn không có quyền chỉnh sửa khách sạn này!"));
+            }
+            return ResponseEntity.ok(service.updateHotelSettings(id, dto));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteHotel(@PathVariable Integer id) {
         service.deleteHotel(id);

@@ -37,6 +37,9 @@ public class HotelDto {
     private Double viDo;
     private Double kinhDo;
 
+    /** Tỷ lệ phần trăm tiền cọc (0–100) */
+    private java.math.BigDecimal tiLeCoc;
+
     private Integer nguoiDungId;   // Manager optional
 
     /** URL ảnh bìa (ảnh chính) */

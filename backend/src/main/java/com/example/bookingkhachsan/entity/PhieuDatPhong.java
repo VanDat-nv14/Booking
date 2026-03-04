@@ -5,23 +5,32 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import org.hibernate.annotations.DynamicInsert;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * @SQLInsert(check = NONE): Fix loi "null identifier" tren SQL Server khi bang co trigger.
+ * SQL Server khong tra ve generated key dung khi trigger AFTER INSERT ton tai.
+ * check = NONE bao Hibernate bo qua viec kiem tra so row affected sau INSERT.
+ * @DynamicInsert: Hibernate chi include cac column co gia tri thay vi ALL columns,
+ * giup tranh loi lien quan den cac column co DEFAULT value trong DB.
+ */
 @Entity
 @Table(name = "phieu_dat_phong")
 @Data
+@DynamicInsert
 public class PhieuDatPhong {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "ma_dat_phong", insertable = false, updatable = false)
-    private String maDatPhong;   // Trigger-generated: BKyyyyMMddXXXX
+    @Column(name = "ma_dat_phong", unique = true)
+    private String maDatPhong;   // Java-generated: BKyyyyMMddXXXX (fallback if trigger not present)
 
     @Column(name = "ngay_den", nullable = false)
     private LocalDate ngayDen;
@@ -92,6 +101,15 @@ public class PhieuDatPhong {
 
     @Column(name = "tien_hoa_hong")
     private BigDecimal tienHoaHong = BigDecimal.ZERO;
+
+    /** Số tiền cọc cần thanh toán trước = thanhTien * tiLeCoc / 100 */
+    @Column(name = "tien_coc")
+    private BigDecimal tienCoc = BigDecimal.ZERO;
+
+    /** Trạng thái cọc: ChuaCoc, DaCoc */
+    @Column(name = "trang_thai_coc", length = 20)
+    private String trangThaiCoc = "ChuaCoc";
+
 
     // ===  Timestamps ===
     @Column(name = "ngay_dat", insertable = false, updatable = false)

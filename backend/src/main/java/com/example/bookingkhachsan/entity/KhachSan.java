@@ -66,6 +66,14 @@ public class KhachSan {
     @Column(name = "kinh_do")
     private Double kinhDo;
 
+    /**
+     * Tỷ lệ phần trăm tiền cọc bắt buộc khi đặt phòng (mặc định 30%).
+     * Áp dụng cho mọi hình thức thanh toán.
+     */
+    @Column(name = "ti_le_coc", precision = 5, scale = 2)
+    private BigDecimal tiLeCoc = new BigDecimal("30.00");
+
+
     /** URL ảnh bìa (ảnh chính hiển thị cho khách) */
     @Column(name = "hinh_anh_bia", columnDefinition = "NVARCHAR(MAX)")
     private String hinhAnhBia;

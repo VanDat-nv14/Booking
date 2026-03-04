@@ -67,17 +67,24 @@ public class BookingController {
         return ResponseEntity.ok(bookingService.getBookingByCode(code));
     }
 
+    /** GET /api/bookings/id/{id} — Xem chi tiet theo ID */
+    @GetMapping("/bookings/id/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<PhieuDatPhong> getBookingById(@PathVariable Integer id) {
+        return ResponseEntity.ok(bookingService.getBookingById(id));
+    }
+
     /** GET /api/bookings/user/{userId} — Danh sach booking cua user */
     @GetMapping("/bookings/user/{userId}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<PhieuDatPhong>> getBookingsByUser(@PathVariable Integer userId) {
+    public ResponseEntity<List<BookingDto.BookingResponse>> getBookingsByUser(@PathVariable Integer userId) {
         return ResponseEntity.ok(bookingService.getBookingsByUser(userId));
     }
 
     /** GET /api/bookings/hotel/{hotelId} — Danh sach booking cua hotel (HotelManager) */
     @GetMapping("/bookings/hotel/{hotelId}")
     @PreAuthorize("hasAnyAuthority('ROLE_Admin', 'ROLE_HotelManager')")
-    public ResponseEntity<List<PhieuDatPhong>> getBookingsByHotel(@PathVariable Integer hotelId) {
+    public ResponseEntity<List<BookingDto.BookingResponse>> getBookingsByHotel(@PathVariable Integer hotelId) {
         return ResponseEntity.ok(bookingService.getBookingsByHotel(hotelId));
     }
 

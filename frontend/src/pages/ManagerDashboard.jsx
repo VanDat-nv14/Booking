@@ -75,10 +75,18 @@ const ManagerDashboard = () => {
 
     const [selectedBooking, setSelectedBooking] = useState(null);
     const [serviceToAdd, setServiceToAdd] = useState({ dichVuId: '', soLuong: 1 });
+    const [surchargeToAdd, setSurchargeToAdd] = useState({ loaiPhuThu: '', soTien: '' });
+
+    // Filter states
+    const [searchBooking, setSearchBooking] = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
+    const [filterDate, setFilterDate] = useState('');
 
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [actionLoading, setActionLoading] = useState(null);
     const [toast, setToast] = useState(null);
+    const [hotelForm, setHotelForm] = useState(null); // For settings tab
+    const [savingHotel, setSavingHotel] = useState(false);
 
     // Fetch assigned hotel logic
     useEffect(() => {
@@ -204,9 +212,10 @@ const ManagerDashboard = () => {
 
     const fetchBookingDetails = async (id) => {
         try {
-            const res = await axiosClient.get(`/bookings/${id}`);
+            const res = await axiosClient.get(`/bookings/id/${id}`);
             setSelectedBooking(res.data);
             setServiceToAdd({ dichVuId: services[0]?.id || '', soLuong: 1 });
+            setSurchargeToAdd({ loaiPhuThu: '', soTien: '' });
         } catch (err) {
             showToast('Lỗi tải chi tiết đặt phòng', 'error');
         }
@@ -251,15 +260,44 @@ const ManagerDashboard = () => {
         }
     };
 
-    // --- Thong ke ---
+    const handleAddSurchargeToBooking = async (e) => {
+        e.preventDefault();
+        try {
+            await axiosClient.post('/surcharges/add', {
+                phieuDatPhongId: selectedBooking.id,
+                loaiPhuThu: surchargeToAdd.loaiPhuThu,
+                soTien: surchargeToAdd.soTien
+            });
+            showToast('Thêm phụ thu thành công');
+            fetchBookingDetails(selectedBooking.id);
+            fetchBookings(); // Reload background data just in case
+            setSurchargeToAdd({ loaiPhuThu: '', soTien: '' });
+        } catch (err) {
+            showToast('Lỗi thêm phụ thu', 'error');
+        }
+    };
+
+    const filteredBookings = bookings.filter(b => {
+        let match = true;
+        if (searchBooking) {
+            const term = searchBooking.toLowerCase();
+            const maPhieu = (b.maDatPhong || '').toLowerCase();
+            const hoTen = (b.hoTenKhach || '').toLowerCase();
+            if (!maPhieu.includes(term) && !hoTen.includes(term)) match = false;
+        }
+        if (filterStatus && b.trangThai !== filterStatus) match = false;
+        if (filterDate && b.ngayDen !== filterDate && b.ngayDi !== filterDate) match = false;
+        return match;
+    });
+
     const stats = {
         total: bookings.length,
         pending: bookings.filter(b => b.trangThai === 'Pending').length,
         checkedIn: bookings.filter(b => b.trangThai === 'CheckedIn').length,
         confirmed: bookings.filter(b => b.trangThai === 'Confirmed').length,
         revenue: bookings
-            .filter(b => b.trangThai === 'CheckedOut')
-            .reduce((sum, b) => sum + (b.tongTien || 0), 0),
+            .filter(b => ['CheckedOut', 'Completed'].includes(b.trangThai))
+            .reduce((sum, b) => sum + Number(b.thanhTien || 0), 0),
     };
 
     const formatCurrency = (amount) =>
@@ -272,11 +310,12 @@ const ManagerDashboard = () => {
 
     // ---- SIDEBAR NAVIGATION ----
     const navItems = [
-        { id: 'overview', label: 'Tổng Quan', icon: ICONS.hotel },
-        { id: 'bookings', label: 'Đặt Phòng', icon: ICONS.booking },
-        { id: 'rooms',    label: 'Phòng',     icon: ICONS.room },
-        { id: 'services', label: 'Dịch Vụ',   icon: ICONS.service },
-        { id: 'profile',  label: 'Hồ Sơ',     icon: ICONS.profile },
+        { id: 'overview',  label: 'Tổng Quan',   icon: ICONS.hotel },
+        { id: 'bookings',  label: 'Đặt Phòng',   icon: ICONS.booking },
+        { id: 'rooms',     label: 'Phòng',        icon: ICONS.room },
+        { id: 'services',  label: 'Dịch Vụ',    icon: ICONS.service },
+        { id: 'settings',  label: 'Cài Đặt KS',  icon: ICONS.revenue },
+        { id: 'profile',   label: 'Hồ Sơ',      icon: ICONS.profile },
     ];
 
     return (
@@ -417,12 +456,13 @@ const ManagerDashboard = () => {
                                         {bookings.slice(0, 5).map(b => (
                                             <div key={b.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
                                                 <div>
-                                                    <p className="font-medium text-gray-800 text-sm">{b.maPhieu || `#${b.id}`}</p>
-                                                    <p className="text-xs text-gray-400">{formatDate(b.ngayNhan)} → {formatDate(b.ngayTra)}</p>
+                                                    <p className="font-medium text-gray-800 text-sm">{b.maDatPhong || `#${b.id}`}</p>
+                                                    <p className="text-xs text-gray-500 font-medium">{b.hoTenKhach || '—'}</p>
+                                                    <p className="text-xs text-gray-400">{formatDate(b.ngayDen)} → {formatDate(b.ngayDi)}</p>
                                                 </div>
                                                 <div className="text-right">
                                                     <StatusBadge status={b.trangThai} />
-                                                    <p className="text-xs text-gray-500 mt-1">{formatCurrency(b.tongTien || 0)}</p>
+                                                    <p className="text-xs text-gray-500 mt-1">{formatCurrency(Number(b.thanhTien) || 0)}</p>
                                                 </div>
                                             </div>
                                         ))}
@@ -450,21 +490,47 @@ const ManagerDashboard = () => {
                     {activeTab === 'bookings' && (
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                                <h3 className="font-semibold text-gray-700">Danh Sách Đặt Phòng ({bookings.length})</h3>
+                                <h3 className="font-semibold text-gray-700">Danh Sách Đặt Phòng ({filteredBookings.length}/{bookings.length})</h3>
                                 <button onClick={fetchBookings} className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1">
                                     ↻ Làm mới
                                 </button>
+                            </div>
+
+                            {/* Filters */}
+                            <div className="flex flex-wrap gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                                <div className="flex-1 min-w-[200px]">
+                                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Tìm Khách / Mã</label>
+                                    <input value={searchBooking} onChange={e => setSearchBooking(e.target.value)} placeholder="Tên khách, Mã phiếu..." className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50/50" />
+                                </div>
+                                <div className="w-40">
+                                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Trạng Thái</label>
+                                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50/50">
+                                        <option value="">Tất cả</option>
+                                        <option value="Pending">Pending</option>
+                                        <option value="Confirmed">Confirmed</option>
+                                        <option value="CheckedIn">CheckedIn</option>
+                                        <option value="CheckedOut">CheckedOut</option>
+                                        <option value="Cancelled">Cancelled</option>
+                                        <option value="Completed">Completed</option>
+                                    </select>
+                                </div>
+                                <div className="w-48">
+                                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Ngày Đến / Trả</label>
+                                    <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50/50" />
+                                </div>
+                                <div className="flex items-end">
+                                    <button onClick={() => {setSearchBooking(''); setFilterStatus(''); setFilterDate('');}} className="px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-100 rounded-lg transition-colors h-[38px]">Xóa Lọc</button>
+                                </div>
                             </div>
 
                             {loadingBookings ? (
                                 <div className="py-20 flex justify-center">
                                     <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
                                 </div>
-                            ) : bookings.length === 0 ? (
-                                <div className="bg-white rounded-2xl shadow-sm p-16 text-center">
+                            ) : filteredBookings.length === 0 ? (
+                                <div className="bg-white rounded-2xl shadow-sm p-16 text-center border border-gray-100">
                                     <Icon d={ICONS.booking} className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                                    <p className="text-gray-500 font-medium">Không có đặt phòng nào</p>
-                                    <p className="text-gray-400 text-sm mt-1">Các booking sẽ hiển thị tại đây</p>
+                                    <p className="text-gray-500 font-medium">Không tìm thấy đặt phòng nào</p>
                                 </div>
                             ) : (
                                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -473,6 +539,7 @@ const ManagerDashboard = () => {
                                             <thead>
                                                 <tr className="bg-gray-50 border-b border-gray-100">
                                                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Mã Phiếu</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Khách</th>
                                                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Nhận Phòng</th>
                                                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Trả Phòng</th>
                                                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Tổng Tiền</th>
@@ -481,16 +548,20 @@ const ManagerDashboard = () => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-50">
-                                                {bookings.map(b => (
+                                                {filteredBookings.map(b => (
                                                     <tr key={b.id} className="hover:bg-emerald-50/30 transition-colors">
                                                         <td className="px-4 py-3">
                                                             <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                                                                {b.maPhieu || `#${b.id}`}
+                                                                {b.maDatPhong || `#${b.id}`}
                                                             </span>
                                                         </td>
-                                                        <td className="px-4 py-3 text-gray-600">{formatDate(b.ngayNhan)}</td>
-                                                        <td className="px-4 py-3 text-gray-600">{formatDate(b.ngayTra)}</td>
-                                                        <td className="px-4 py-3 font-semibold text-gray-800">{formatCurrency(b.tongTien || 0)}</td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-medium text-gray-800">{b.hoTenKhach || '—'}</p>
+                                                            <p className="text-xs text-gray-400">{b.emailKhach || ''}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-gray-600">{formatDate(b.ngayDen)}</td>
+                                                        <td className="px-4 py-3 text-gray-600">{formatDate(b.ngayDi)}</td>
+                                                        <td className="px-4 py-3 font-semibold text-gray-800">{formatCurrency(Number(b.thanhTien) || 0)}</td>
                                                         <td className="px-4 py-3"><StatusBadge status={b.trangThai} /></td>
                                                         <td className="px-4 py-3">
                                                             <button onClick={() => fetchBookingDetails(b.id)} className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition">
@@ -605,8 +676,81 @@ const ManagerDashboard = () => {
                         </div>
                     )}
 
+                    {/* ======== SETTINGS ======== */}
+                    {activeTab === 'settings' && (() => {
+                        const form = hotelForm || myHotel || {};
+                        const handleChange = (field, val) => setHotelForm(prev => ({ ...(prev || myHotel || {}), [field]: val }));
+                        const handleSave = async (e) => {
+                            e.preventDefault();
+                            setSavingHotel(true);
+                            try {
+                                await axiosClient.put(`/hotels/${myHotel.id}/settings`, form);
+                                setMyHotel({ ...myHotel, ...form });
+                                setHotelForm(null);
+                                showToast('Đã lưu cài đặt khách sạn!');
+                            } catch (err) {
+                                showToast(err.response?.data?.message || 'Lỗi lưu cài đặt!', 'error');
+                            } finally {
+                                setSavingHotel(false);
+                            }
+                        };
+                        return (
+                            <div className="max-w-xl space-y-6">
+                                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                                    <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-white">
+                                        <h3 className="font-bold text-lg">⚙️ Cài Đặt Khách Sạn</h3>
+                                        <p className="text-emerald-100 text-sm">{myHotel?.ten}</p>
+                                    </div>
+                                    <form onSubmit={handleSave} className="p-6 space-y-5">
+                                        {/* Deposit rate */}
+                                        <div className="bg-orange-50 border border-orange-100 rounded-xl p-4">
+                                            <label className="block text-sm font-bold text-orange-800 mb-1">💰 Tỷ lệ tiền cọc (%)</label>
+                                            <p className="text-xs text-gray-500 mb-3">Khách phải cọc trước khi nhận phòng với mọi hình thức thanh toán.</p>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    type="number"
+                                                    min="0" max="100" step="5"
+                                                    value={form.tiLeCoc ?? 30}
+                                                    onChange={e => handleChange('tiLeCoc', e.target.value)}
+                                                    className="w-28 border border-orange-200 rounded-lg px-3 py-2 text-lg font-bold text-center focus:ring-2 focus:ring-orange-400 outline-none"
+                                                />
+                                                <span className="text-2xl font-bold text-orange-600">%</span>
+                                                <span className="text-xs text-gray-500">của tổng tiền phòng</span>
+                                            </div>
+                                            <p className="text-xs text-orange-600 mt-2 font-medium">
+                                                Ví dụ: Phòng 1.200.000đ/đêm × 2 đêm = 2.400.000đ → Tiền cọc: {Math.round(2400000 * (form.tiLeCoc ?? 30) / 100).toLocaleString('vi-VN')}đ
+                                            </p>
+                                        </div>
+
+                                        {/* Check-in / Check-out times */}
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-xs font-semibold text-gray-600 block mb-1">Giờ nhận phòng</label>
+                                                <input type="time" value={form.gioNhanPhong || '14:00'} onChange={e => handleChange('gioNhanPhong', e.target.value)}
+                                                    className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-semibold text-gray-600 block mb-1">Giờ trả phòng</label>
+                                                <input type="time" value={form.gioTraPhong || '12:00'} onChange={e => handleChange('gioTraPhong', e.target.value)}
+                                                    className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-end pt-2">
+                                            <button type="submit" disabled={savingHotel}
+                                                className="px-6 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition">
+                                                {savingHotel ? '⏳ Đang lưu...' : '💾 Lưu cài đặt'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
                     {/* ======== PROFILE ======== */}
                     {activeTab === 'profile' && (
+
                         <div className="max-w-lg">
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                                 {/* Profile header */}
@@ -736,15 +880,21 @@ const ManagerDashboard = () => {
                                 <div className="space-y-4">
                                     <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                                         <h4 className="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Thông Tin Khách</h4>
-                                        <p className="text-sm"><span className="text-gray-500 inline-block w-20">Khách:</span> <span className="font-semibold text-gray-800">{selectedBooking.nguoiDung?.hoTen || 'N/A'}</span></p>
-                                        <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-20">Email:</span> {selectedBooking.nguoiDung?.email || 'N/A'}</p>
-                                        <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-20">Số điện thoại:</span> {selectedBooking.nguoiDung?.soDienThoai || 'N/A'}</p>
+                                        <p className="text-sm"><span className="text-gray-500 inline-block w-20">Khách:</span> <span className="font-semibold text-gray-800">{selectedBooking.hoTenKhach || selectedBooking.nguoiDung?.hoTen || 'N/A'}</span></p>
+                                        <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-20">Email:</span> {selectedBooking.emailKhach || selectedBooking.nguoiDung?.email || 'N/A'}</p>
+                                        <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-20">Số đT:</span> {selectedBooking.nguoiDung?.soDienThoai || <span className="italic text-gray-300">Chưa cập nhật</span>}</p>
+                                        {selectedBooking.ghiChuKhach && (
+                                            <p className="text-sm mt-2 p-2 bg-yellow-50 rounded-lg text-yellow-800 border border-yellow-100">
+                                                <span className="font-semibold">Ghi chú:</span> {selectedBooking.ghiChuKhach}
+                                            </p>
+                                        )}
                                     </div>
                                     <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                                         <h4 className="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Thông Tin Phòng</h4>
-                                        <p className="text-sm"><span className="text-gray-500 inline-block w-20">Phòng:</span> <span className="font-semibold text-gray-800">{selectedBooking.phong?.ten} ({selectedBooking.phong?.soPhong})</span></p>
-                                        <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-20">Loại:</span> {selectedBooking.phong?.loaiPhong?.ten}</p>
-                                        <p className="text-sm mt-1 mb-2"><span className="text-gray-500 inline-block w-20">Giá gốc:</span> {formatCurrency(selectedBooking.giaPhongGoc)} / đêm</p>
+                                        <p className="text-sm"><span className="text-gray-500 inline-block w-20">Phòng:</span> <span className="font-semibold text-gray-800">{selectedBooking.tenPhong || selectedBooking.phong?.ten} ({selectedBooking.soPhong || selectedBooking.phong?.soPhong})</span></p>
+                                        <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-20">Loại:</span> {selectedBooking.loaiPhong || selectedBooking.phong?.loaiPhong?.ten}</p>
+                                        <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-20">Giá gốc:</span> {formatCurrency(selectedBooking.giaPhongGoc)} / đêm</p>
+                                        <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-20">TT thanh toán:</span> <span className="font-medium text-blue-700">{selectedBooking.phuongThucThanhToan || 'Tiền mặt'}</span></p>
                                         <div className="flex gap-4 mt-3 bg-gray-50 p-2 rounded-lg text-center">
                                             <div className="flex-1">
                                                 <p className="text-xs text-gray-400 font-semibold">Ngày Đến</p>
@@ -764,14 +914,49 @@ const ManagerDashboard = () => {
                                         <h4 className="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Hóa Đơn</h4>
                                         <div className="space-y-2 text-sm">
                                             <div className="flex justify-between">
-                                                <span className="text-gray-600">Tiền phòng gốc:</span>
-                                                <span className="font-medium text-gray-800">{formatCurrency(selectedBooking.thanhTien)}</span>
+                                                <span className="text-gray-600">Tiền phòng:</span>
+                                                <span className="font-medium text-gray-800">{formatCurrency(selectedBooking.giaPhongGoc)} x {selectedBooking.soNgay || '?'} đêm</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-gray-600">Thanh toán:</span>
+                                                <span className="text-gray-600">Tổng:</span>
+                                                <span className="font-medium text-gray-800">{formatCurrency(selectedBooking.thanhTien)}</span>
+                                            </div>
+                                            {Number(selectedBooking.tienCoc) > 0 && (
+                                                <div className="flex justify-between items-center bg-orange-50 p-2 rounded-lg border border-orange-100">
+                                                    <span className="text-orange-700 font-semibold">💰 Tiền cọ:</span>
+                                                    <div className="text-right">
+                                                        <span className="font-bold text-orange-600">{formatCurrency(selectedBooking.tienCoc)}</span>
+                                                        <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-semibold ${
+                                                            selectedBooking.trangThaiCoc === 'DaCoc'
+                                                                ? 'bg-green-100 text-green-700'
+                                                                : 'bg-red-100 text-red-700'
+                                                        }`}>{selectedBooking.trangThaiCoc === 'DaCoc' ? '✓ Đã cọ' : '⏳ Chưa cọ'}</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-600">TT thanh toán:</span>
                                                 <span className="font-medium text-orange-600">{selectedBooking.trangThaiThanhToan}</span>
                                             </div>
                                         </div>
+
+                                        {(selectedBooking.chiTietDichVus?.length > 0 || selectedBooking.phuThus?.length > 0) && (
+                                            <div className="mt-3 pt-3 border-t border-gray-100 space-y-2 text-sm">
+                                                {selectedBooking.chiTietDichVus?.map((dv, i) => (
+                                                    <div key={`dv-${i}`} className="flex justify-between text-gray-600">
+                                                        <span>{dv.dichVu?.ten} (x{dv.soLuong})</span>
+                                                        <span>{formatCurrency((dv.donGiaLucDat || 0) * (dv.soLuong || 1))}</span>
+                                                    </div>
+                                                ))}
+                                                {selectedBooking.phuThus?.map((pt, i) => (
+                                                    <div key={`pt-${i}`} className="flex justify-between text-gray-600">
+                                                        <span>Phụ thu: {pt.loaiPhuThu}</span>
+                                                        <span>{formatCurrency(pt.soTien || 0)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
                                         <div className="mt-4 pt-3 border-t border-dashed flex justify-between items-center">
                                             <span className="font-bold text-gray-700">TỔNG CỘNG:</span>
                                             <span className="text-lg font-black text-emerald-600">{formatCurrency(selectedBooking.thanhTien)}</span>
@@ -779,22 +964,38 @@ const ManagerDashboard = () => {
                                     </div>
                                     
                                     {selectedBooking.trangThai === 'CheckedIn' && (
-                                        <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm bg-emerald-50/30">
-                                            <h4 className="text-sm font-bold text-emerald-800 mb-3 border-b border-emerald-100 pb-2">➕ Thêm Dịch Vụ</h4>
-                                            <form onSubmit={handleAddServiceToBooking} className="flex gap-2 items-end">
-                                                <div className="flex-1">
-                                                    <label className="text-xs font-semibold text-gray-600">Dịch vụ</label>
-                                                    <select required value={serviceToAdd.dichVuId} onChange={e => setServiceToAdd({...serviceToAdd, dichVuId: e.target.value})} className="mt-1 w-full border border-emerald-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-emerald-500 bg-white">
-                                                        <option value="" disabled>-- Chọn --</option>
-                                                        {services.map(s => <option key={s.id} value={s.id}>{s.ten} - {formatCurrency(s.giaTien)}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="w-20">
-                                                    <label className="text-xs font-semibold text-gray-600">SL</label>
-                                                    <input required type="number" min="1" value={serviceToAdd.soLuong} onChange={e => setServiceToAdd({...serviceToAdd, soLuong: e.target.value})} className="mt-1 w-full border border-emerald-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-emerald-500 text-center" />
-                                                </div>
-                                                <button type="submit" className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 h-[34px] shadow-sm">+</button>
-                                            </form>
+                                        <div className="space-y-3">
+                                            <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm bg-emerald-50/30">
+                                                <h4 className="text-sm font-bold text-emerald-800 mb-3 border-b border-emerald-100 pb-2">➕ Thêm Dịch Vụ</h4>
+                                                <form onSubmit={handleAddServiceToBooking} className="flex gap-2 items-end">
+                                                    <div className="flex-1">
+                                                        <label className="text-xs font-semibold text-gray-600">Dịch vụ</label>
+                                                        <select required value={serviceToAdd.dichVuId} onChange={e => setServiceToAdd({...serviceToAdd, dichVuId: e.target.value})} className="mt-1 w-full border border-emerald-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-emerald-500 bg-white">
+                                                            <option value="" disabled>-- Chọn --</option>
+                                                            {services.map(s => <option key={s.id} value={s.id}>{s.ten} - {formatCurrency(s.giaTien)}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div className="w-20">
+                                                        <label className="text-xs font-semibold text-gray-600">SL</label>
+                                                        <input required type="number" min="1" value={serviceToAdd.soLuong} onChange={e => setServiceToAdd({...serviceToAdd, soLuong: e.target.value})} className="mt-1 w-full border border-emerald-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-emerald-500 text-center" />
+                                                    </div>
+                                                    <button type="submit" className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 h-[34px] shadow-sm">+</button>
+                                                </form>
+                                            </div>
+                                            <div className="bg-white p-4 rounded-xl border border-amber-100 shadow-sm bg-amber-50/30">
+                                                <h4 className="text-sm font-bold text-amber-800 mb-3 border-b border-amber-100 pb-2">⚠️ Thêm Phụ Thu</h4>
+                                                <form onSubmit={handleAddSurchargeToBooking} className="flex gap-2 items-end">
+                                                    <div className="flex-1">
+                                                        <label className="text-xs font-semibold text-gray-600">Lý do phụ thu</label>
+                                                        <input required value={surchargeToAdd.loaiPhuThu} onChange={e => setSurchargeToAdd({...surchargeToAdd, loaiPhuThu: e.target.value})} placeholder="Làm hỏng đồ, check out muộn..." className="mt-1 w-full border border-amber-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-amber-500 bg-white" />
+                                                    </div>
+                                                    <div className="w-32">
+                                                        <label className="text-xs font-semibold text-gray-600">Số tiền</label>
+                                                        <input required type="number" min="0" value={surchargeToAdd.soTien} onChange={e => setSurchargeToAdd({...surchargeToAdd, soTien: e.target.value})} className="mt-1 w-full border border-amber-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-amber-500" />
+                                                    </div>
+                                                    <button type="submit" className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 h-[34px] shadow-sm">+</button>
+                                                </form>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
