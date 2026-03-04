@@ -337,6 +337,33 @@ const AdminDashboard = () => {
   const [showManagerConfirmPw, setShowManagerConfirmPw] = useState(false);
   const [managerPwError, setManagerPwError] = useState('');
 
+  // Bookings state
+  const [bookings, setBookings] = useState([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [searchBooking, setSearchBooking] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterDate, setFilterDate] = useState('');
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [actionLoading, setActionLoading] = useState(null);
+
+  const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+  const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('vi-VN') : 'N/A';
+
+  const StatusBadge = ({ status }) => {
+      const colors = {
+          Pending: 'bg-yellow-100 text-yellow-800', Confirmed: 'bg-blue-100 text-blue-800',
+          CheckedIn: 'bg-indigo-100 text-indigo-800', CheckedOut: 'bg-purple-100 text-purple-800',
+          Completed: 'bg-emerald-100 text-emerald-800', Cancelled: 'bg-gray-100 text-gray-800',
+          Rejected: 'bg-red-100 text-red-800', NoShow: 'bg-orange-100 text-orange-800'
+      };
+      const label = {
+          Pending: 'Chờ xác nhận', Confirmed: 'Đã xác nhận', CheckedIn: 'Đang lưu trú',
+          CheckedOut: 'Đã trả phòng', Completed: 'Hoàn tất', Cancelled: 'Đã hủy',
+          Rejected: 'Từ chối', NoShow: 'Khách không đến'
+      };
+      return <span className={`px-2 py-1 rounded-full text-xs font-semibold ${colors[status] || 'bg-gray-100 text-gray-800'}`}>{label[status] || status}</span>;
+  };
+
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
@@ -354,6 +381,49 @@ const AdminDashboard = () => {
       setLoading(false);
     }
   }, [showToast]);
+
+  const fetchBookings = useCallback(async () => {
+    setLoadingBookings(true);
+    try {
+      const res = await axiosClient.get('/admin/bookings');
+      setBookings(res.data);
+    } catch {
+      showToast('Không thể tải danh sách đặt phòng!', 'error');
+    } finally {
+      setLoadingBookings(false);
+    }
+  }, [showToast]);
+
+  const fetchBookingDetails = async (id) => {
+      try {
+          const res = await axiosClient.get(`/bookings/id/${id}`);
+          setSelectedBooking(res.data);
+      } catch (err) {
+          showToast('Lỗi tải chi tiết đặt phòng', 'error');
+      }
+  };
+
+  const handleBookingAction = async (action, id) => {
+      setActionLoading(`${id}-${action}`);
+      try {
+          if (['confirm', 'checkin', 'no-show', 'complete'].includes(action)) {
+              await axiosClient.put(`/bookings/${id}/${action}`);
+          } else if (action === 'reject') {
+              await axiosClient.put(`/bookings/${id}/reject`, { ghiChu: 'Admin từ chối' });
+          } else if (action === 'checkout') {
+              await axiosClient.post(`/bookings/${id}/checkout`, { phuongThuc: 'TienMat' });
+          }
+          showToast(`Cập nhật trạng thái thành công!`);
+          fetchBookings();
+          if (selectedBooking && selectedBooking.id === id) {
+              fetchBookingDetails(id);
+          }
+      } catch (err) {
+          showToast(err.response?.data?.message || 'Lỗi xử lý.', 'error');
+      } finally {
+          setActionLoading(null);
+      }
+  };
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
@@ -405,8 +475,10 @@ const AdminDashboard = () => {
     if (activeTab === 'hotels') {
       fetchHotels();
       fetchQuocGias();
-    } 
-  }, [activeTab]);
+    } else if (activeTab === 'bookings') {
+      fetchBookings();
+    }
+  }, [activeTab, fetchBookings]);
 
   // ── User Actions ──────────────────────────────
   const handleSaveUser = (savedUser, isEdit) => {
@@ -604,6 +676,19 @@ const AdminDashboard = () => {
     const matchQ = !searchQ || u.hoTen?.toLowerCase().includes(searchQ.toLowerCase()) || u.email?.toLowerCase().includes(searchQ.toLowerCase());
     const matchRole = !roleFilter || u.chucVu === roleFilter;
     return matchQ && matchRole;
+  });
+
+  const filteredBookings = bookings.filter(b => {
+      let match = true;
+      if (searchBooking) {
+          const term = searchBooking.toLowerCase();
+          const maPhieu = (b.maPhieu || b.maDatPhong || '').toLowerCase();
+          const hoTen = (b.hoTenKhach || b.nguoiDung?.hoTen || '').toLowerCase();
+          if (!maPhieu.includes(term) && !hoTen.includes(term)) match = false;
+      }
+      if (filterStatus && b.trangThai !== filterStatus) match = false;
+      if (filterDate && b.ngayNhan !== filterDate && b.ngayDen !== filterDate) match = false;
+      return match;
   });
 
   // ── Stats ─────────────────────────────────────
@@ -1275,6 +1360,191 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
+
+          {/* ── BOOKINGS TAB ── */}
+          {activeTab === 'bookings' && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <h2 className="text-2xl font-bold text-gray-800">Quản Lý Đặt Phòng Toàn Cầu</h2>
+                <button onClick={fetchBookings} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition">
+                  ↻ Làm mới
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className="flex flex-wrap gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                  <div className="flex-1 min-w-[200px]">
+                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Tìm Khách / Mã</label>
+                      <input value={searchBooking} onChange={e => setSearchBooking(e.target.value)} placeholder="Tên khách, Mã phiếu..." className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50/50" />
+                  </div>
+                  <div className="w-40">
+                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Trạng Thái</label>
+                      <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50/50">
+                          <option value="">Tất cả</option>
+                          <option value="Pending">Pending</option>
+                          <option value="Confirmed">Confirmed</option>
+                          <option value="CheckedIn">CheckedIn</option>
+                          <option value="CheckedOut">CheckedOut</option>
+                          <option value="Cancelled">Cancelled</option>
+                          <option value="Completed">Completed</option>
+                      </select>
+                  </div>
+                  <div className="w-48">
+                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Ngày Đến / Trả</label>
+                      <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50/50" />
+                  </div>
+                  <div className="flex items-end">
+                      <button onClick={() => {setSearchBooking(''); setFilterStatus(''); setFilterDate('');}} className="px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-100 rounded-lg transition-colors h-[38px]">Xóa Lọc</button>
+                  </div>
+              </div>
+
+              {loadingBookings ? (
+                  <div className="py-20 flex justify-center">
+                      <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  </div>
+              ) : filteredBookings.length === 0 ? (
+                  <div className="bg-white rounded-2xl shadow-sm p-16 text-center border border-gray-100">
+                      <p className="text-gray-500 font-medium">Không tìm thấy đặt phòng nào</p>
+                  </div>
+              ) : (
+                  <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto pb-6">
+                          <table className="min-w-full text-sm">
+                              <thead>
+                                  <tr className="bg-gray-50 border-b border-gray-100">
+                                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Khách sạn</th>
+                                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Mã Phiếu</th>
+                                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Khách hàng</th>
+                                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nhận Phòng</th>
+                                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tổng Tiền</th>
+                                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Trạng Thái</th>
+                                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Hành Động</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                  {filteredBookings.map(b => (
+                                      <tr key={b.id} className="hover:bg-blue-50/30 transition-colors">
+                                          <td className="px-4 py-3 text-gray-800 font-medium">{b.phong?.khachSan?.ten}</td>
+                                          <td className="px-4 py-3">
+                                              <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                                                  {b.maPhieu || `#${b.id}`}
+                                              </span>
+                                          </td>
+                                          <td className="px-4 py-3 text-gray-700">{b.hoTenKhach || b.nguoiDung?.hoTen || 'N/A'}</td>
+                                          <td className="px-4 py-3 text-gray-600">{formatDate(b.ngayNhan)}</td>
+                                          <td className="px-4 py-3 font-semibold text-gray-800">{formatCurrency(b.thanhTien || 0)}</td>
+                                          <td className="px-4 py-3"><StatusBadge status={b.trangThai} /></td>
+                                          <td className="px-4 py-3">
+                                              <button onClick={() => fetchBookingDetails(b.id)} className="bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition">
+                                                  Chi Tiết
+                                              </button>
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+              )}
+            </div>
+          )}
+
+          {/* Booking Details Modal (Admin view) */}
+          {selectedBooking && activeTab === 'bookings' && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+                      <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                          <div>
+                              <h2 className="font-bold text-lg text-gray-800">Chi Tiết Đặt Phòng <span className="text-blue-600 font-mono ml-2">#{selectedBooking.maDatPhong || selectedBooking.id}</span></h2>
+                              <p className="text-xs text-gray-500 mt-1">Trạng thái: <StatusBadge status={selectedBooking.trangThai} /></p>
+                          </div>
+                          <button onClick={() => setSelectedBooking(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                      </div>
+                      <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
+                          <div className="grid grid-cols-2 gap-6">
+                              <div className="space-y-4">
+                                  <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                      <h4 className="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Thông Tin Khách</h4>
+                                      <p className="text-sm"><span className="text-gray-500 inline-block w-24">Khách:</span> <span className="font-semibold text-gray-800">{selectedBooking.nguoiDung?.hoTen || selectedBooking.hoTenKhach || 'N/A'}</span></p>
+                                      <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-24">Email:</span> {selectedBooking.nguoiDung?.email || selectedBooking.emailKhach || 'N/A'}</p>
+                                      <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-24">Số điện thoại:</span> {selectedBooking.nguoiDung?.soDienThoai || selectedBooking.sdtKhach || 'N/A'}</p>
+                                  </div>
+                                  <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                      <h4 className="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Thông Tin Phòng & Khách Sạn</h4>
+                                      <p className="text-sm"><span className="text-gray-500 inline-block w-24">Khách sạn:</span> <span className="font-semibold text-gray-800">{selectedBooking.phong?.khachSan?.ten}</span></p>
+                                      <p className="text-sm"><span className="text-gray-500 inline-block w-24">Phòng:</span> <span className="font-semibold text-gray-800">{selectedBooking.phong?.ten} ({selectedBooking.phong?.soPhong})</span></p>
+                                      <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-24">Loại:</span> {selectedBooking.phong?.loaiPhong?.ten}</p>
+                                      <div className="flex gap-4 mt-3 bg-gray-50 p-2 rounded-lg text-center">
+                                          <div className="flex-1">
+                                              <p className="text-xs text-gray-400 font-semibold">Ngày Đến</p>
+                                              <p className="text-sm font-bold text-blue-700">{formatDate(selectedBooking.ngayDen)}</p>
+                                          </div>
+                                          <div className="flex-1 border-l border-gray-200">
+                                              <p className="text-xs text-gray-400 font-semibold">Ngày Đi</p>
+                                              <p className="text-sm font-bold text-orange-700">{formatDate(selectedBooking.ngayDi)}</p>
+                                          </div>
+                                      </div>
+                                  </div>
+                              </div>
+                              <div className="space-y-4">
+                                  <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                      <h4 className="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Hóa Đơn & Thanh Toán</h4>
+                                      <div className="space-y-2 text-sm">
+                                          <div className="flex justify-between">
+                                              <span className="text-gray-600">Tiền phòng gốc:</span>
+                                              <span className="font-medium text-gray-800">{formatCurrency(selectedBooking.giaPhongGoc || 0)}</span>
+                                          </div>
+                                          <div className="flex justify-between">
+                                              <span className="text-gray-600">Thanh toán:</span>
+                                              <span className="font-medium text-orange-600">{selectedBooking.trangThaiThanhToan}</span>
+                                          </div>
+                                      </div>
+
+                                      {(selectedBooking.chiTietDichVus?.length > 0 || selectedBooking.phuThus?.length > 0) && (
+                                          <div className="mt-3 pt-3 border-t border-gray-100 space-y-2 text-sm">
+                                              {selectedBooking.chiTietDichVus?.map((dv, i) => (
+                                                  <div key={`dv-${i}`} className="flex justify-between text-gray-600">
+                                                      <span>{dv.dichVu?.ten} (x{dv.soLuong})</span>
+                                                      <span>{formatCurrency((dv.donGiaLucDat || 0) * (dv.soLuong || 1))}</span>
+                                                  </div>
+                                              ))}
+                                              {selectedBooking.phuThus?.map((pt, i) => (
+                                                  <div key={`pt-${i}`} className="flex justify-between text-gray-600">
+                                                      <span>Phụ thu: {pt.loaiPhuThu}</span>
+                                                      <span>{formatCurrency(pt.soTien || 0)}</span>
+                                                  </div>
+                                              ))}
+                                          </div>
+                                      )}
+
+                                      <div className="mt-4 pt-3 border-t border-dashed flex justify-between items-center">
+                                          <span className="font-bold text-gray-700">TỔNG CỘNG:</span>
+                                          <span className="text-lg font-black text-blue-600">{formatCurrency(selectedBooking.thanhTien)}</span>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                      <div className="px-6 py-4 bg-white border-t flex flex-wrap gap-3 justify-end items-center">
+                          {selectedBooking.trangThai === 'Pending' && (
+                              <>
+                                  <button onClick={() => handleBookingAction('reject', selectedBooking.id)} disabled={actionLoading} className="px-4 py-2 border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 text-sm font-semibold rounded-lg transition-colors">Từ chối (Reject)</button>
+                                  <button onClick={() => handleBookingAction('confirm', selectedBooking.id)} disabled={actionLoading} className="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 shadow-sm transition-colors">Xác nhận (Confirm)</button>
+                              </>
+                          )}
+                          {selectedBooking.trangThai === 'Confirmed' && (
+                              <button onClick={() => handleBookingAction('checkin', selectedBooking.id)} disabled={actionLoading} className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 shadow-sm transition-colors">Nhận phòng (Check-in)</button>
+                          )}
+                          {selectedBooking.trangThai === 'CheckedIn' && (
+                              <button onClick={() => handleBookingAction('checkout', selectedBooking.id)} disabled={actionLoading} className="px-5 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 shadow-sm transition-colors w-full sm:w-auto">Thanh toán & Trả phòng (Check-out)</button>
+                          )}
+                          {selectedBooking.trangThai === 'CheckedOut' && (
+                              <button onClick={() => handleBookingAction('complete', selectedBooking.id)} disabled={actionLoading} className="px-5 py-2 bg-gray-800 text-white text-sm font-semibold rounded-lg hover:bg-gray-900 shadow-sm transition-colors">Hoàn tất (Complete)</button>
+                          )}
+                      </div>
+                  </div>
+              </div>
+          )}
 
 
       <Toast msg={toast?.msg} type={toast?.type} />

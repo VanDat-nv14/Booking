@@ -21,6 +21,8 @@ public interface PhieuDatPhongRepository extends JpaRepository<PhieuDatPhong, In
 
     List<PhieuDatPhong> findByTrangThaiOrderByNgayDatDesc(String trangThai);
 
+    List<PhieuDatPhong> findAllByOrderByNgayDatDesc();
+
     /**
      * Dem so booking trung ngay (dung cho fallback check, chinh la phong_kha_dung)
      */

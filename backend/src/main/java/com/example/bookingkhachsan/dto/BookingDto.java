@@ -130,7 +130,11 @@ public class BookingDto {
         private BigDecimal thanhTien;
         private String phuongThucThanhToan;
 
-        // Thong tin boo
+        // Tien coc
+        private BigDecimal tienCoc;
+        private String trangThaiCoc;
+
+        // Thong tin booking
         private String loaiDatPhong;
         private LocalDateTime pendingExpiresAt;
         private LocalDateTime ngayDat;
@@ -186,5 +190,9 @@ public class BookingDto {
         // So ngay
         private Integer soNgay;
         private BigDecimal tongTienDuTinh;
+
+        // Tien coc du tinh (tiLeCoc% * tongTienDuTinh)
+        private BigDecimal tiLeCocKhachSan;  // To le % (VD: 30.00)
+        private BigDecimal tienCocDuTinh;    // So tien coc cu the
     }
 }

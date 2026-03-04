@@ -179,6 +179,24 @@ public class HotelService {
         khachSanRepository.deleteById(id);
     }
 
+    /**
+     * HotelManager cập nhật chỉ các trường an toàn: tiền cọ, giờ nhận/trả phòng.
+     */
+    @Transactional
+    public KhachSan updateHotelSettings(Integer id, com.example.bookingkhachsan.dto.HotelDto dto) {
+        KhachSan hotel = getDetails(id);
+        if (dto.getTiLeCoc() != null) {
+            hotel.setTiLeCoc(dto.getTiLeCoc());
+        }
+        if (dto.getGioNhanPhong() != null) {
+            hotel.setGioNhanPhong(dto.getGioNhanPhong());
+        }
+        if (dto.getGioTraPhong() != null) {
+            hotel.setGioTraPhong(dto.getGioTraPhong());
+        }
+        return khachSanRepository.save(hotel);
+    }
+
     private void mapDtoToEntity(com.example.bookingkhachsan.dto.HotelDto dto, KhachSan hotel) {
         hotel.setTen(dto.getTen());
         hotel.setDiaChi(dto.getDiaChi());
@@ -188,6 +206,9 @@ public class HotelService {
         hotel.setGioTraPhong(dto.getGioTraPhong());
         hotel.setViDo(dto.getViDo());
         hotel.setKinhDo(dto.getKinhDo());
+        if (dto.getTiLeCoc() != null) {
+            hotel.setTiLeCoc(dto.getTiLeCoc());
+        }
 
         // Images
         hotel.setHinhAnhBia(dto.getHinhAnhBia());

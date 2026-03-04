@@ -70,8 +70,10 @@ const ImageGallery = ({ cover, images = [] }) => {
 
   if (allImages.length === 0) {
     return (
-      <div className="h-80 md:h-[420px] bg-gradient-to-br from-blue-900 to-indigo-900 flex items-center justify-center">
-        <span className="text-8xl opacity-30">🏨</span>
+      <div className="container mx-auto px-4 mt-6 mb-8">
+        <div className="h-64 md:h-[320px] bg-gradient-to-br from-blue-900 to-indigo-900 flex items-center justify-center rounded-xl shadow-sm">
+          <span className="text-8xl opacity-30">🏨</span>
+        </div>
       </div>
     );
   }
@@ -81,42 +83,74 @@ const ImageGallery = ({ cover, images = [] }) => {
 
   return (
     <>
-      <div className="h-80 md:h-[480px] grid gap-1.5 pr-0" style={{ gridTemplateColumns: allImages.length > 1 ? '1fr 1fr' : '1fr' }}>
-        {/* Main large image */}
-        <div className={`relative overflow-hidden cursor-pointer group ${allImages.length === 1 ? 'col-span-2' : ''}`}
-          onClick={() => setLightbox(0)}>
-          <img src={mainImg} alt="Ảnh chính" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-          <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors" />
-        </div>
+      <div className="container mx-auto px-4 mt-6 mb-8">
+        {/* Top Section: 1 Main + 2 Side Images */}
+        {allImages.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 h-64 md:h-80 relative">
+            {/* Main large image (left, takes 2/3 width on md+) */}
+            <div className={`md:col-span-2 relative h-full w-full overflow-hidden cursor-pointer group bg-gray-100 flex justify-center items-center ${allImages.length > 3 ? 'rounded-t-lg md:rounded-t-none md:rounded-tl-xl' : 'rounded-lg md:rounded-none md:rounded-l-xl'}`}
+              onClick={() => setLightbox(0)}>
+              <img src={mainImg} alt="Ảnh chính" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors pointer-events-none" />
+            </div>
 
-        {/* Thumbnail grid */}
-        {thumbs.length > 0 && (
-          <div className="grid grid-rows-2 gap-1.5">
-            {thumbs.map((img, idx) => (
-              <div key={idx} className="relative overflow-hidden cursor-pointer group"
-                onClick={() => setLightbox(idx + 1)}>
-                <img src={img} alt={`Ảnh ${idx + 2}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors" />
-                {idx === thumbs.length - 1 && allImages.length > 5 && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <span className="text-white font-bold text-xl">+{allImages.length - 5}</span>
-                  </div>
-                )}
-              </div>
-            ))}
+            {/* 2 Side Images (right, stacked) */}
+            <div className="hidden md:grid grid-rows-2 gap-2 h-full">
+              {allImages[1] ? (
+                <div className={`relative h-full w-full overflow-hidden cursor-pointer group bg-gray-100 ${allImages.length > 3 ? 'rounded-tr-xl' : 'rounded-tr-xl'}`} onClick={() => setLightbox(1)}>
+                  <img src={allImages[1]} alt="Ảnh 2" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors pointer-events-none" />
+                </div>
+              ) : (
+                <div className="bg-gray-100 rounded-tr-xl h-full w-full" />
+              )}
+              {allImages[2] ? (
+                 <div className={`relative h-full w-full overflow-hidden cursor-pointer group bg-gray-100 ${allImages.length > 3 ? '' : 'rounded-br-xl'}`} onClick={() => setLightbox(2)}>
+                   <img src={allImages[2]} alt="Ảnh 3" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                   <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors pointer-events-none" />
+                 </div>
+              ) : (
+                 <div className={`bg-gray-100 h-full w-full ${allImages.length > 3 ? '' : 'rounded-br-xl'}`} />
+              )}
+            </div>
+            
+            {/* View All Button */}
+            {allImages.length > 1 && (
+              <button 
+                onClick={() => setLightbox(0)}
+                className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-md text-gray-800 text-sm font-semibold px-4 py-2 rounded-lg shadow-lg hover:bg-gray-50 hover:shadow-xl transition-all flex items-center gap-2 border border-gray-100 z-10"
+              >
+                <span className="text-lg leading-none">📸</span> Hiển thị tất cả ảnh
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Bottom Section: Row of Thumbnails (max 5) */}
+        {allImages.length > 3 && (
+          <div className="grid grid-cols-5 gap-2 mt-2 h-16 md:h-32">
+             {allImages.slice(3, 8).map((img, idx) => {
+               const actualIdx = idx + 3;
+               const isLastVisible = idx === 4;
+               const remainingCount = allImages.length - 8;
+
+               return (
+                 <div key={actualIdx} className={`relative overflow-hidden cursor-pointer group bg-gray-100 ${idx === 0 ? 'rounded-bl-xl' : ''} ${idx === 4 || actualIdx === allImages.length - 1 ? 'rounded-br-xl' : ''}`}
+                   onClick={() => setLightbox(actualIdx)}>
+                   <img src={img} alt={`Ảnh ${actualIdx + 1}`} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                   <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors pointer-events-none" />
+                   
+                   {isLastVisible && remainingCount > 0 && (
+                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
+                       <span className="text-white font-semibold text-sm md:text-base underline underline-offset-4 decoration-2">+{remainingCount} ảnh</span>
+                     </div>
+                   )}
+                 </div>
+               )
+             })}
           </div>
         )}
       </div>
-
-      {/* All-images button */}
-      {allImages.length > 1 && (
-        <div className="relative -mt-12 flex justify-end pr-4 z-10">
-          <button onClick={() => setLightbox(0)}
-            className="bg-white/90 backdrop-blur text-gray-700 text-sm font-semibold px-4 py-2 rounded-xl shadow-lg hover:bg-white transition flex items-center gap-2 border border-gray-200">
-            📷 Xem tất cả {allImages.length} ảnh
-          </button>
-        </div>
-      )}
 
       {/* Lightbox */}
       {lightbox !== null && (
@@ -386,7 +420,7 @@ const HotelDetailPage = () => {
 
         {/* Back button overlay */}
         <button onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 z-20 bg-white/80 backdrop-blur text-gray-700 hover:bg-white rounded-full px-4 py-2 text-sm font-medium shadow transition flex items-center gap-1.5">
+          className="absolute top-10 left-8 z-20 bg-white/90 backdrop-blur text-gray-700 hover:bg-white rounded-full px-4 py-2 text-sm font-semibold shadow-md transition flex items-center gap-1.5 border border-gray-100">
           ← Quay lại
         </button>
       </div>
@@ -602,9 +636,9 @@ const HotelDetailPage = () => {
                       className={`bg-white rounded-2xl shadow-sm border-2 transition-all ${isSelected ? 'border-blue-500 ring-2 ring-blue-100' : 'border-transparent hover:border-gray-200'}`}>
                       <div className="flex flex-col md:flex-row">
                         {/* Room image */}
-                        <div className="w-full md:w-52 h-44 rounded-t-2xl md:rounded-l-2xl md:rounded-tr-none overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center flex-shrink-0">
+                        <div className="w-full md:w-52 h-44 rounded-t-2xl md:rounded-l-2xl md:rounded-tr-none overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
                           {room.hinhAnh
-                            ? <img src={room.hinhAnh} alt={room.tenLoaiPhong} className="w-full h-full object-cover" />
+                            ? <img src={room.hinhAnh} alt={room.tenLoaiPhong} className="w-full h-full object-contain" />
                             : <span className="text-5xl">🛏️</span>
                           }
                         </div>
@@ -716,6 +750,16 @@ const HotelDetailPage = () => {
                   <span className="font-semibold text-gray-700">Tổng dự kiến</span>
                   <span className="text-xl font-bold text-blue-700">{fmt(selectedRoom.tongTienDuTinh)}</span>
                 </div>
+                {/* Deposit Info */}
+                {selectedRoom.tienCocDuTinh > 0 && (
+                  <div className="border-t border-orange-100 pt-2 mt-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-semibold text-orange-700">💰 Tiền cọc ({selectedRoom.tiLeCocKhachSan}%)</span>
+                      <span className="text-base font-bold text-orange-600">{fmt(selectedRoom.tienCocDuTinh)}</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">Áp dụng cho mọi hình thức thanh toán. Số còn lại thanh toán tại khách sạn.</p>
+                  </div>
+                )}
                 <PolicyBadge
                   choPhepHuy={selectedRoom.choPhepHuy}
                   mienPhiHuyTruocGio={selectedRoom.mienPhiHuyTruocGio}
