@@ -14,6 +14,27 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
+// Helper component để map cập nhật view khi center thay đổi
+const MapUpdater = ({ center, zoom }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (center && center.length === 2 && !isNaN(center[0]) && !isNaN(center[1])) {
+       map.setView(center, zoom || map.getZoom());
+    }
+  }, [center, zoom, map]);
+  return null;
+};
+
+// Helper component để bắt sự kiện click trên bản đồ
+const MapClickHandler = ({ onLocationSelect }) => {
+  useMapEvents({
+    click(e) {
+      if (onLocationSelect) onLocationSelect(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+};
+
 // ── Helpers ────────────────────────────────────
 const ROLES = ['Admin', 'HotelManager', 'User'];
 const ROLE_COLORS = {
@@ -370,27 +391,27 @@ const AdminDashboard = () => {
     setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const fetchUsers = useCallback(async () => {
-    setLoading(true);
+  const fetchUsers = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await axiosClient.get('/admin/users');
       setUsers(res.data);
     } catch {
-      showToast('Không thể tải danh sách người dùng!', 'error');
+      if (!silent) showToast('Không thể tải danh sách người dùng!', 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [showToast]);
 
-  const fetchBookings = useCallback(async () => {
-    setLoadingBookings(true);
+  const fetchBookings = useCallback(async (silent = false) => {
+    if (!silent) setLoadingBookings(true);
     try {
       const res = await axiosClient.get('/admin/bookings');
       setBookings(res.data);
     } catch {
-      showToast('Không thể tải danh sách đặt phòng!', 'error');
+      if (!silent) showToast('Không thể tải danh sách đặt phòng!', 'error');
     } finally {
-      setLoadingBookings(false);
+      if (!silent) setLoadingBookings(false);
     }
   }, [showToast]);
 
@@ -425,6 +446,7 @@ const AdminDashboard = () => {
       }
   };
 
+  // On first load, show spinner; subsequent tab revisits fetch silently
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   const fetchHotels = async () => {
@@ -472,13 +494,18 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => { 
+    const silent = (activeTab === 'hotels' && hotels.length > 0)
+                || (activeTab === 'bookings' && bookings.length > 0)
+                || (activeTab === 'users' && users.length > 0);
     if (activeTab === 'hotels') {
       fetchHotels();
-      fetchQuocGias();
+      if (quocGias.length === 0) fetchQuocGias();
     } else if (activeTab === 'bookings') {
-      fetchBookings();
+      fetchBookings(silent);
+    } else if (activeTab === 'users') {
+      fetchUsers(silent);
     }
-  }, [activeTab, fetchBookings]);
+  }, [activeTab, fetchBookings, fetchUsers]);
 
   // ── User Actions ──────────────────────────────
   const handleSaveUser = (savedUser, isEdit) => {
@@ -565,6 +592,8 @@ const AdminDashboard = () => {
       gioTraPhong: hotel.gioTraPhong || '12:00',
       hinhAnhBia: hotel.hinhAnhBia || '',
       hinhAnhs: hotel.hinhAnhs || [],
+      viDo: hotel.viDo || 0,
+      kinhDo: hotel.kinhDo || 0,
       managerEmail: '',
       managerPassword: '',
       managerName: '',
@@ -825,6 +854,7 @@ const AdminDashboard = () => {
                         <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase rounded-tl-xl">Người dùng</th>
                         <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase">Email</th>
                         <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase">SĐT</th>
+                        <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase">Ngày đăng ký</th>
                         <th className="px-5 py-3 text-center text-xs font-bold text-gray-500 uppercase">Vai trò</th>
                         <th className="px-5 py-3 text-center text-xs font-bold text-gray-500 uppercase">Trạng thái</th>
                         <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase rounded-tr-xl">Hành động</th>
@@ -835,15 +865,19 @@ const AdminDashboard = () => {
                         <tr key={user.id} className="hover:bg-blue-50 transition">
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-3">
-                              <img src={avatar(user.hoTen)} className="w-9 h-9 rounded-full" alt="" />
+                              <img src={user.avatarUrl || avatar(user.hoTen)} className="w-9 h-9 rounded-full object-cover" alt="" />
                               <div>
                                 <p className="font-semibold text-gray-800">{user.hoTen}</p>
                                 <p className="text-xs text-gray-400">ID: {user.id}</p>
+                                {user.quocTich && <p className="text-xs text-gray-400">🌍 {user.quocTich}</p>}
                               </div>
                             </div>
                           </td>
                           <td className="px-5 py-3 text-gray-600">{user.email}</td>
                           <td className="px-5 py-3 text-gray-400 text-xs">{user.sdt || '—'}</td>
+                          <td className="px-5 py-3 text-xs text-gray-500">
+                            {user.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN') : '—'}
+                          </td>
                           <td className="px-5 py-3 text-center">
                             <RoleDropdown user={user} onRoleChange={handleRoleChange} />
                           </td>
@@ -1095,16 +1129,18 @@ const AdminDashboard = () => {
                               </div>
                             </div>
                             
-                            <div className="h-[300px] w-full relative z-0">
-                               <MapContainer center={[hotelFormData.viDo, hotelFormData.kinhDo]} zoom={13} style={{ height: '100%', width: '100%' }}>
-                                  <TileLayer
-                                    attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
-                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                  />
-                                  <MapUpdater center={[hotelFormData.viDo, hotelFormData.kinhDo]} />
-                                  <MapClickHandler onLocationSelect={(lat, lng) => setHotelFormData(f => ({...f, viDo: lat, kinhDo: lng}))} />
-                                  <Marker position={[hotelFormData.viDo, hotelFormData.kinhDo]} />
-                                </MapContainer>
+                            <div className="h-[300px] w-full relative z-0 bg-gray-100 flex items-center justify-center">
+                               {typeof hotelFormData.viDo === 'number' && typeof hotelFormData.kinhDo === 'number' && !isNaN(hotelFormData.viDo) && !isNaN(hotelFormData.kinhDo) ? (
+                                 <MapContainer center={[hotelFormData.viDo, hotelFormData.kinhDo]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                                    <TileLayer
+                                      attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+                                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                    />
+                                    <MapUpdater center={[hotelFormData.viDo, hotelFormData.kinhDo]} />
+                                    <MapClickHandler onLocationSelect={(lat, lng) => setHotelFormData(f => ({...f, viDo: lat, kinhDo: lng}))} />
+                                    <Marker position={[hotelFormData.viDo, hotelFormData.kinhDo]} />
+                                  </MapContainer>
+                               ) : <span className="text-sm text-gray-400">Tọa độ chưa khả dụng</span>}
                             </div>
                             <div className="bg-white p-2 border-t flex justify-between items-center">
                               <p className="text-[10px] text-gray-500 font-medium">✨ Click trên bản đồ để ghim tự động nhận toạ độ.</p>
@@ -1130,12 +1166,14 @@ const AdminDashboard = () => {
                 {hotelFormData.diaChi && !showMapPicker && (
                   <div className="col-span-2">
                     <label className="text-xs font-semibold text-gray-600 block mb-1.5">🗺️ Xem trước vị trí (theo địa chỉ)</label>
-                    <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm relative h-[200px] z-0">
-                       <MapContainer center={[hotelFormData.viDo, hotelFormData.kinhDo]} zoom={15} style={{ height: '100%', width: '100%' }} dragging={false} scrollWheelZoom={false} doubleClickZoom={false} zoomControl={false}>
-                          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                          <MapUpdater center={[hotelFormData.viDo, hotelFormData.kinhDo]} />
-                          <Marker position={[hotelFormData.viDo, hotelFormData.kinhDo]} />
-                        </MapContainer>
+                    <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm relative h-[200px] z-0 bg-gray-100 flex items-center justify-center">
+                       {typeof hotelFormData.viDo === 'number' && typeof hotelFormData.kinhDo === 'number' && !isNaN(hotelFormData.viDo) && !isNaN(hotelFormData.kinhDo) ? (
+                         <MapContainer center={[hotelFormData.viDo, hotelFormData.kinhDo]} zoom={15} style={{ height: '100%', width: '100%' }} dragging={false} scrollWheelZoom={false} doubleClickZoom={false} zoomControl={false}>
+                            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                            <MapUpdater center={[hotelFormData.viDo, hotelFormData.kinhDo]} />
+                            <Marker position={[hotelFormData.viDo, hotelFormData.kinhDo]} />
+                          </MapContainer>
+                       ) : <span className="text-sm text-gray-400">Tọa độ chưa khả dụng</span>}
                         <div className="absolute inset-0 bg-transparent z-[1000]" title="Bản đồ chỉ xem trước. Bấm vào 'Chọn trên bản đồ' ở phần Vị trí để chỉnh sửa toạ độ."></div>
                     </div>
                     <p className="text-xs text-gray-400 mt-1">Bản đồ tự động cập nhật Toạ độ theo ghim vị trí</p>
@@ -1381,12 +1419,14 @@ const AdminDashboard = () => {
                       <label className="text-xs font-semibold text-gray-500 mb-1 block">Trạng Thái</label>
                       <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50/50">
                           <option value="">Tất cả</option>
-                          <option value="Pending">Pending</option>
-                          <option value="Confirmed">Confirmed</option>
-                          <option value="CheckedIn">CheckedIn</option>
-                          <option value="CheckedOut">CheckedOut</option>
-                          <option value="Cancelled">Cancelled</option>
-                          <option value="Completed">Completed</option>
+                          <option value="Pending">Chờ xác nhận</option>
+                          <option value="Confirmed">Đã xác nhận</option>
+                          <option value="CheckedIn">Đang lưu trú</option>
+                          <option value="CheckedOut">Đã thanh toán (Trả phòng)</option>
+                          <option value="Completed">Hoàn thành</option>
+                          <option value="Cancelled">Đã hủy</option>
+                          <option value="Rejected">Từ chối</option>
+                          <option value="NoShow">Không đến</option>
                       </select>
                   </div>
                   <div className="w-48">
@@ -1465,15 +1505,15 @@ const AdminDashboard = () => {
                               <div className="space-y-4">
                                   <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                                       <h4 className="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Thông Tin Khách</h4>
-                                      <p className="text-sm"><span className="text-gray-500 inline-block w-24">Khách:</span> <span className="font-semibold text-gray-800">{selectedBooking.nguoiDung?.hoTen || selectedBooking.hoTenKhach || 'N/A'}</span></p>
-                                      <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-24">Email:</span> {selectedBooking.nguoiDung?.email || selectedBooking.emailKhach || 'N/A'}</p>
-                                      <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-24">Số điện thoại:</span> {selectedBooking.nguoiDung?.soDienThoai || selectedBooking.sdtKhach || 'N/A'}</p>
+                                      <p className="text-sm"><span className="text-gray-500 inline-block w-24">Khách:</span> <span className="font-semibold text-gray-800">{selectedBooking.hoTenKhach || 'N/A'}</span></p>
+                                      <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-24">Email:</span> {selectedBooking.emailKhach || 'N/A'}</p>
+                                      <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-24">Số điện thoại:</span> {selectedBooking.sdtKhach || 'N/A'}</p>
                                   </div>
                                   <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                                       <h4 className="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Thông Tin Phòng & Khách Sạn</h4>
-                                      <p className="text-sm"><span className="text-gray-500 inline-block w-24">Khách sạn:</span> <span className="font-semibold text-gray-800">{selectedBooking.phong?.khachSan?.ten}</span></p>
-                                      <p className="text-sm"><span className="text-gray-500 inline-block w-24">Phòng:</span> <span className="font-semibold text-gray-800">{selectedBooking.phong?.ten} ({selectedBooking.phong?.soPhong})</span></p>
-                                      <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-24">Loại:</span> {selectedBooking.phong?.loaiPhong?.ten}</p>
+                                      <p className="text-sm"><span className="text-gray-500 inline-block w-24">Khách sạn:</span> <span className="font-semibold text-gray-800">{selectedBooking.tenKhachSan || 'N/A'}</span></p>
+                                      <p className="text-sm"><span className="text-gray-500 inline-block w-24">Phòng:</span> <span className="font-semibold text-gray-800">{selectedBooking.tenPhong || 'N/A'} ({selectedBooking.soPhong || 'N/A'})</span></p>
+                                      <p className="text-sm mt-1"><span className="text-gray-500 inline-block w-24">Loại:</span> {selectedBooking.loaiPhong || 'N/A'}</p>
                                       <div className="flex gap-4 mt-3 bg-gray-50 p-2 rounded-lg text-center">
                                           <div className="flex-1">
                                               <p className="text-xs text-gray-400 font-semibold">Ngày Đến</p>

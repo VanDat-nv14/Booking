@@ -33,7 +33,8 @@ public class SecurityConfiguration {
             .authorizeHttpRequests(auth -> auth
                 // --- Public endpoints ---
                 .requestMatchers("/", "/api/auth/**", "/api/locations/**",
-                        "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error").permitAll()
+                        "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error",
+                        "/uploads/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/hotels/**", "/api/room-types/**").permitAll()
 
 

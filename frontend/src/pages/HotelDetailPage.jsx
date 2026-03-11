@@ -289,7 +289,7 @@ const HotelDetailPage = () => {
   const [searched, setSearched]             = useState(false);
 
   const [selectedRoom, setSelectedRoom]   = useState(null);
-  const [bookingMethod, setBookingMethod] = useState('InstantBooking');
+  const [bookingMethod, setBookingMethod] = useState('RequestToBook');
   const [payMethod, setPayMethod]         = useState('TienMat');
   const [guestNote, setGuestNote]         = useState('');
   const [booking, setBooking]             = useState(false);
@@ -392,7 +392,7 @@ const HotelDetailPage = () => {
         </div>
         <div className={`text-sm font-medium px-3 py-1.5 rounded-full inline-block mb-6
           ${bookingResult.trangThai === 'Confirmed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-          {bookingResult.trangThai === 'Confirmed' ? '✓ Đã xác nhận' : '⏳ Chờ xác nhận (30 phút)'}
+          {bookingResult.trangThai === 'Confirmed' ? '✓ Đã xác nhận' : '⏳ Chờ khách sạn xác nhận'}
         </div>
         <div className="flex gap-3">
           <button onClick={() => navigate('/')} className="flex-1 py-2.5 border border-gray-300 text-gray-600 rounded-xl hover:bg-gray-50 transition text-sm font-medium">
@@ -773,23 +773,7 @@ const HotelDetailPage = () => {
               </div>
             )}
 
-            {/* Booking type */}
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-gray-500 mb-2">Loại đặt phòng</label>
-              <div className="grid grid-cols-2 gap-2">
-                {[['InstantBooking', '⚡ Tức thì'], ['RequestToBook', '📝 Yêu cầu duyệt']].map(([val, label]) => (
-                  <button key={val} onClick={() => setBookingMethod(val)}
-                    className={`py-2 rounded-lg text-xs font-medium border transition ${
-                      bookingMethod === val ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
-                    }`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-gray-400 mt-1.5">
-                {bookingMethod === 'InstantBooking' ? 'Phòng được xác nhận ngay sau khi đặt' : 'Chủ khách sạn sẽ duyệt trong 24h'}
-              </p>
-            </div>
+
 
             {/* Payment method */}
             <div className="mb-4">

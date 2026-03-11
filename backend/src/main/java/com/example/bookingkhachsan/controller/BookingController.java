@@ -63,15 +63,15 @@ public class BookingController {
     /** GET /api/bookings/{code} — Xem chi tiet theo ma phieu */
     @GetMapping("/bookings/{code}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<PhieuDatPhong> getBooking(@PathVariable String code) {
-        return ResponseEntity.ok(bookingService.getBookingByCode(code));
+    public ResponseEntity<BookingDto.BookingResponse> getBooking(@PathVariable String code) {
+        return ResponseEntity.ok(bookingService.getBookingByCodeResponse(code));
     }
 
     /** GET /api/bookings/id/{id} — Xem chi tiet theo ID */
     @GetMapping("/bookings/id/{id}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<PhieuDatPhong> getBookingById(@PathVariable Integer id) {
-        return ResponseEntity.ok(bookingService.getBookingById(id));
+    public ResponseEntity<BookingDto.BookingResponse> getBookingById(@PathVariable Integer id) {
+        return ResponseEntity.ok(bookingService.getBookingByIdResponse(id));
     }
 
     /** GET /api/bookings/user/{userId} — Danh sach booking cua user */
@@ -174,6 +174,13 @@ public class BookingController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<BookingDto.PaymentHistoryResponse>> paymentHistory(@PathVariable Integer id) {
         return ResponseEntity.ok(bookingService.getPaymentHistory(id));
+    }
+
+    /** GET /api/bookings/{id}/invoice — Xem hoa don chi tiet (phong + DV + phu thu) */
+    @GetMapping("/bookings/{id}/invoice")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<BookingDto.InvoiceResponse> getInvoice(@PathVariable Integer id) {
+        return ResponseEntity.ok(bookingService.getInvoice(id));
     }
 
     // =====================================================

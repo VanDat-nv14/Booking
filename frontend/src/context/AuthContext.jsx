@@ -9,33 +9,56 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (token) {
-            // Khoi phuc phien lam viec tu localStorage
-            const storedRole = localStorage.getItem('role');
-            const storedName = localStorage.getItem('hoTen');
-            const storedUserId = localStorage.getItem('userId');
-            const storedEmail = localStorage.getItem('email');
-            if (storedRole && storedName) {
-                setUser({
-                    role: storedRole,
-                    hoTen: storedName,
-                    userId: storedUserId,
-                    email: storedEmail,
-                });
+        const init = async () => {
+            if (token) {
+                const storedRole = localStorage.getItem('role');
+                const storedName = localStorage.getItem('hoTen');
+                const storedUserId = localStorage.getItem('userId');
+                const storedEmail = localStorage.getItem('email');
+                const storedAvatar = localStorage.getItem('avatarUrl');
+                if (storedRole && storedName) {
+                    // Set immediately from localStorage (no loading flash)
+                    setUser({
+                        role: storedRole,
+                        hoTen: storedName,
+                        userId: storedUserId,
+                        email: storedEmail,
+                        avatarUrl: storedAvatar || null,
+                    });
+                    // Then fetch fresh avatarUrl from API in background
+                    if (storedUserId) {
+                        try {
+                            const res = await axiosClient.get(`/user/${storedUserId}`);
+                            const freshAvatar = res.data.avatarUrl || null;
+                            if (freshAvatar) localStorage.setItem('avatarUrl', freshAvatar);
+                            else localStorage.removeItem('avatarUrl');
+                            setUser(prev => prev ? { ...prev, avatarUrl: freshAvatar } : prev);
+                        } catch (_) { /* silent */ }
+                    }
+                }
             }
-        }
-        setLoading(false);
+            setLoading(false);
+        };
+        init();
     }, [token]);
 
     // Dang nhap: luu token va thong tin user vao state va localStorage
-    const login = (newToken, role, hoTen, userId, email) => {
+    const login = (newToken, role, hoTen, userId, email, avatarUrl) => {
         localStorage.setItem('token', newToken);
         localStorage.setItem('role', role);
         localStorage.setItem('hoTen', hoTen);
         localStorage.setItem('userId', String(userId));
         localStorage.setItem('email', email);
+        if (avatarUrl) localStorage.setItem('avatarUrl', avatarUrl);
         setToken(newToken);
-        setUser({ role, hoTen, userId: String(userId), email });
+        setUser({ role, hoTen, userId: String(userId), email, avatarUrl: avatarUrl || null });
+    };
+
+    // Cap nhat avatar sau khi upload
+    const updateAvatar = (url) => {
+        if (url) localStorage.setItem('avatarUrl', url);
+        else localStorage.removeItem('avatarUrl');
+        setUser(prev => prev ? { ...prev, avatarUrl: url || null } : prev);
     };
 
     // Dang xuat: xoa TOAN BO du lieu phien
@@ -43,8 +66,9 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('token');
         localStorage.removeItem('role');
         localStorage.removeItem('hoTen');
-        localStorage.removeItem('userId');   // FIX: truoc day bi bo sot
-        localStorage.removeItem('email');    // FIX: truoc day bi bo sot
+        localStorage.removeItem('userId');
+        localStorage.removeItem('email');
+        localStorage.removeItem('avatarUrl');
         setToken(null);
         setUser(null);
     };
@@ -57,7 +81,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, loading, hasRole }}>
+        <AuthContext.Provider value={{ user, token, login, logout, loading, hasRole, updateAvatar }}>
             {!loading && children}
         </AuthContext.Provider>
     );

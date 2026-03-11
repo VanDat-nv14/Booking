@@ -20,8 +20,12 @@ const STATUSES = [
   { key: 'CheckedOut', label: 'Đã trả phòng',   icon: '🚪', color: 'text-gray-600 bg-gray-50 border-gray-200' },
   { key: 'Completed',  label: 'Hoàn thành',     icon: '🎉', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
 ];
-const BAD_STATUSES = ['Expired', 'Cancelled', 'Rejected'];
+const BAD_STATUSES = ['Expired', 'Cancelled', 'Rejected', 'NoShow'];
 
+const STATUS_LABELS = {
+  Pending: 'Đã đặt', Confirmed: 'Đã xác nhận', CheckedIn: 'Đang lưu trú', CheckedOut: 'Đã trả phòng', Completed: 'Hoàn thành',
+  Expired: 'Hết hạn', Cancelled: 'Đã hủy', Rejected: 'Từ chối', NoShow: 'Không đến'
+};
 const STATUS_BADGE = {
   Pending:    'bg-yellow-100 text-yellow-700',
   Confirmed:  'bg-blue-100 text-blue-700',
@@ -36,6 +40,7 @@ const STATUS_BADGE = {
 /* ── Booking Detail Modal ─────────────────────────────────── */
 const BookingDetailModal = ({ bookingId, onClose }) => {
   const [detail, setDetail] = useState(null);
+  const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [showConfirmCancel, setShowConfirmCancel] = useState(false);
@@ -43,8 +48,12 @@ const BookingDetailModal = ({ bookingId, onClose }) => {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await axiosClient.get(`/bookings/id/${bookingId}`);
-        setDetail(res.data);
+        const [bookRes, invRes] = await Promise.all([
+          axiosClient.get(`/bookings/id/${bookingId}`),
+          axiosClient.get(`/bookings/${bookingId}/invoice`).catch(() => ({ data: null })),
+        ]);
+        setDetail(bookRes.data);
+        setInvoice(invRes.data);
       } catch { /* ignore */ }
       finally { setLoading(false); }
     };
@@ -103,7 +112,7 @@ const BookingDetailModal = ({ bookingId, onClose }) => {
 
             {/* Status badge */}
             <div className={`flex items-center justify-between p-3 rounded-xl border ${STATUS_BADGE[detail.trangThai] || 'bg-gray-100 text-gray-600'} border-current/20`}>
-              <span className="font-bold">{isBad ? '⚠️' : '●'} Trạng thái: {detail.trangThai}</span>
+              <span className="font-bold">{isBad ? '⚠️' : '●'} Trạng thái: {STATUS_LABELS[detail.trangThai] || detail.trangThai}</span>
               {detail.trangThaiThanhToan && (
                 <span className="text-xs font-semibold opacity-75">💳 {detail.trangThaiThanhToan}</span>
               )}
@@ -165,40 +174,67 @@ const BookingDetailModal = ({ bookingId, onClose }) => {
               </div>
             </div>
 
-            {/* Invoice */}
+            {/* Invoice - dùng invoice API nếu có, fallback về detail */}
             <div className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-              <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-100">
-                <span>🧾</span>
-                <p className="font-bold text-gray-800">Hóa đơn</p>
+              <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <span>🧾</span>
+                  <p className="font-bold text-gray-800">Hóa đơn chi tiết</p>
+                </div>
+                {detail.trangThaiThanhToan === 'DaThanhToan' && (
+                  <span className="text-xs font-bold px-2 py-1 rounded-full bg-green-100 text-green-700">✓ Đã thanh toán</span>
+                )}
               </div>
               <div className="divide-y divide-gray-50 text-sm">
+                {/* Tiền phòng */}
                 <div className="flex justify-between px-4 py-2.5">
-                  <span className="text-gray-500">Tiền phòng</span>
-                  <span className="font-medium">{fmt(detail.giaPhongGoc)}/đêm × {detail.soNgay || Math.max(1, Math.ceil((new Date(detail.ngayDi) - new Date(detail.ngayDen)) / 86400000))}</span>
+                  <span className="text-gray-500">🏨 Tiền phòng ({invoice?.soNgay || detail.soNgay || 1} đêm × {fmt(invoice?.giaPhongMot || detail.giaPhongGoc)})</span>
+                  <span className="font-medium">{fmt(invoice?.tienPhong || detail.thanhTien)}</span>
                 </div>
-                {/* Services */}
-                {detail.chiTietDichVus?.map((ct, i) => (
+                {/* Dịch vụ từ invoice API */}
+                {invoice?.dichVus?.map((dv, i) => (
                   <div key={i} className="flex justify-between px-4 py-2 bg-blue-50/30">
-                    <span className="text-gray-500 pl-2">🛎 {ct.dichVu?.ten || ct.tenDichVu || 'Dịch vụ'} ×{ct.soLuong}</span>
+                    <span className="text-gray-500 pl-2">🛎 {dv.tenDichVu} ×{dv.soLuong}</span>
+                    <span className="text-gray-700">{fmt(dv.thanhTien)}</span>
+                  </div>
+                ))}
+                {/* Fallback: dịch vụ từ detail nếu không có invoice */}
+                {!invoice && detail.chiTietDichVus?.map((ct, i) => (
+                  <div key={i} className="flex justify-between px-4 py-2 bg-blue-50/30">
+                    <span className="text-gray-500 pl-2">🛎 {ct.dichVu?.ten || 'Dịch vụ'} ×{ct.soLuong}</span>
                     <span className="text-gray-700">{fmt((ct.donGiaLucDat || 0) * (ct.soLuong || 1))}</span>
                   </div>
                 ))}
-                {/* Surcharges */}
-                {detail.phuThus?.map((pt, i) => (
+                {/* Phụ thu từ invoice API */}
+                {invoice?.phuThus?.map((pt, i) => (
                   <div key={i} className="flex justify-between px-4 py-2 bg-orange-50/30">
                     <span className="text-gray-500 pl-2">⚠️ {pt.loaiPhuThu}</span>
                     <span className="text-orange-600">+{fmt(pt.soTien)}</span>
                   </div>
                 ))}
-                {detail.tienCoc > 0 && (
+                {/* Fallback phụ thu */}
+                {!invoice && detail.phuThus?.map((pt, i) => (
+                  <div key={i} className="flex justify-between px-4 py-2 bg-orange-50/30">
+                    <span className="text-gray-500 pl-2">⚠️ {pt.loaiPhuThu}</span>
+                    <span className="text-orange-600">+{fmt(pt.soTien)}</span>
+                  </div>
+                ))}
+                {/* Tiền cọc */}
+                {Number(invoice?.tienCoc || detail.tienCoc) > 0 && (
                   <div className="flex justify-between px-4 py-2.5 bg-amber-50/40">
-                    <span className="text-amber-600 font-medium">💰 Tiền cọc ({detail.trangThaiCoc === 'DaCoc' ? '✓ Đã cọc' : 'Chưa cọc'})</span>
-                    <span className="text-amber-600 font-medium">{fmt(detail.tienCoc)}</span>
+                    <span className="text-amber-600 font-medium">💰 Tiền cọc</span>
+                    <div className="text-right">
+                      <span className="text-amber-600 font-medium">{fmt(invoice?.tienCoc || detail.tienCoc)}</span>
+                      <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                        (invoice?.trangThaiCoc || detail.trangThaiCoc) === 'DaCoc' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                      }`}>{(invoice?.trangThaiCoc || detail.trangThaiCoc) === 'DaCoc' ? '✓ Đã cọc' : 'Chưa cọc'}</span>
+                    </div>
                   </div>
                 )}
-                <div className="flex justify-between px-4 py-3 bg-gray-50">
-                  <span className="font-bold text-gray-800">Tổng cộng</span>
-                  <span className="font-extrabold text-blue-700 text-base">{fmt(detail.thanhTien)}</span>
+                {/* Tổng */}
+                <div className="flex justify-between px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <span className="font-bold text-gray-800">TỔNG CỘNG</span>
+                  <span className="font-extrabold text-blue-700 text-base">{fmt(invoice?.tongCong || detail.thanhTien)}</span>
                 </div>
               </div>
             </div>
@@ -243,19 +279,39 @@ const BookingDetailModal = ({ bookingId, onClose }) => {
 
 /* ── Main UserProfilePage ─────────────────────────────────── */
 const UserProfilePage = () => {
-  const { user: authUser, login, token } = useAuth();
+  const { user: authUser, updateAvatar } = useAuth();
   const navigate = useNavigate();
   const userId = authUser?.userId;
 
   const [activeTab, setActiveTab] = useState('info');
-  const [profile, setProfile] = useState({ hoTen: '', email: '', sdt: '', chucVu: '' });
+  const [profile, setProfile] = useState({
+    hoTen: '', tenHienThi: '', email: '', sdt: '', chucVu: '',
+    ngaySinh: '', quocTich: '', gioiTinh: '', diaChi: '',
+    soHoChieu: '', hoChieuTen: '', hoChieuHo: '', hoChieuQuocGia: '', hoChieuNgayHetHan: '',
+    avatarUrl: ''
+  });
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [selectedBookingId, setSelectedBookingId] = useState(null);
+  const [selectedReviewBooking, setSelectedReviewBooking] = useState(null);
 
-  const [form, setForm] = useState({ hoTen: '', sdt: '' });
+  // Edit state per field (null = closed, fieldKey = open)
+  const [editingField, setEditingField] = useState(null);
+  const [editValue, setEditValue] = useState('');
+
+  // Passport form state
+  const [showPassportForm, setShowPassportForm] = useState(false);
+  const [passportForm, setPassportForm] = useState({ soHoChieu: '', hoChieuTen: '', hoChieuHo: '', hoChieuQuocGia: '', hoChieuNgayHetHan: '' });
+
+  // Avatar editing state
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [avatarInput, setAvatarInput] = useState('');
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [avatarTab, setAvatarTab] = useState('file'); // 'file' | 'url'
+
   const [pwForm, setPwForm] = useState({ matKhauCu: '', matKhauMoi: '', xacNhanMatKhau: '' });
   const [showPw, setShowPw] = useState({ cu: false, moi: false, xn: false });
 
@@ -273,7 +329,6 @@ const UserProfilePage = () => {
           axiosClient.get(`/bookings/user/${userId}`).catch(() => ({ data: [] })),
         ]);
         setProfile(profileRes.data);
-        setForm({ hoTen: profileRes.data.hoTen || '', sdt: profileRes.data.sdt || '' });
         setBookings(bookingRes.data || []);
       } catch {
         showToast('Không thể tải thông tin!', 'error');
@@ -284,13 +339,51 @@ const UserProfilePage = () => {
     load();
   }, [userId]);
 
-  const handleSaveInfo = async (e) => {
-    e.preventDefault(); setSaving(true);
+  const saveField = async (fieldData) => {
+    setSaving(true);
     try {
-      const res = await axiosClient.put(`/user/${userId}`, { hoTen: form.hoTen, sdt: form.sdt });
+      const res = await axiosClient.put(`/user/${userId}`, fieldData);
       setProfile(prev => ({ ...prev, ...res.data }));
-      localStorage.setItem('hoTen', res.data.hoTen);
-      showToast('Cập nhật thông tin thành công!');
+      setEditingField(null);
+      showToast('Cập nhật thành công!');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Cập nhật thất bại!', 'error');
+    } finally { setSaving(false); }
+  };
+
+  const handleAvatarFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const handleSaveAvatar = async () => {
+    setSaving(true);
+    try {
+      if (avatarTab === 'file' && avatarFile) {
+        const formData = new FormData();
+        formData.append('file', avatarFile);
+        const res = await axiosClient.post(`/user/${userId}/avatar`, formData, {
+          headers: { 'Content-Type': undefined }   // let browser set multipart/form-data + boundary
+        });
+        setProfile(prev => ({ ...prev, ...res.data }));
+        showToast('Cập nhật ảnh đại diện thành công!');
+        updateAvatar(res.data.avatarUrl || null);
+      } else if (avatarTab === 'url' && avatarInput.trim()) {
+        const res = await axiosClient.put(`/user/${userId}`, { avatarUrl: avatarInput.trim() });
+        setProfile(prev => ({ ...prev, ...res.data }));
+        showToast('Cập nhật ảnh đại diện thành công!');
+        updateAvatar(avatarInput.trim());
+      } else {
+        showToast('Vui lòng chọn ảnh hoặc nhập URL!', 'error');
+        setSaving(false);
+        return;
+      }
+      setShowAvatarModal(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      setAvatarInput('');
     } catch (err) {
       showToast(err.response?.data?.error || 'Cập nhật thất bại!', 'error');
     } finally { setSaving(false); }
@@ -298,9 +391,7 @@ const UserProfilePage = () => {
 
   const handleChangePw = async (e) => {
     e.preventDefault();
-    if (pwForm.matKhauMoi !== pwForm.xacNhanMatKhau) {
-      showToast('Mật khẩu xác nhận không khớp!', 'error'); return;
-    }
+    if (pwForm.matKhauMoi !== pwForm.xacNhanMatKhau) { showToast('Mật khẩu xác nhận không khớp!', 'error'); return; }
     setSaving(true);
     try {
       await axiosClient.put(`/user/${userId}`, pwForm);
@@ -311,26 +402,74 @@ const UserProfilePage = () => {
     } finally { setSaving(false); }
   };
 
+  const BACKEND = 'http://localhost:8080';
+  const displayAvatar = profile.avatarUrl
+    ? (profile.avatarUrl.startsWith('http') ? profile.avatarUrl : BACKEND + profile.avatarUrl)
+    : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.hoTen || 'U')}&background=4f46e5&color=fff&bold=true&size=128`;
+
   if (loading) return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center">
       <div className="w-12 h-12 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
+  // Profile field rows config
+  const profileRows = [
+    {
+      key: 'hoTen', label: 'Tên', value: profile.hoTen, inputType: 'text',
+      placeholder: 'Nguyễn Văn A', required: true,
+      hint: null
+    },
+    {
+      key: 'tenHienThi', label: 'Tên hiển thị', value: profile.tenHienThi,
+      inputType: 'text', placeholder: 'Chọn tên hiển thị',
+      hint: null
+    },
+    {
+      key: 'email', label: 'Địa chỉ email', value: profile.email,
+      inputType: 'email', readOnly: true,
+      hint: 'Đây là địa chỉ email bạn dùng để đăng nhập. Chúng tôi cũng sẽ gửi các xác nhận đặt chỗ tới địa chỉ này.',
+      badge: { text: 'Xác thực', color: 'bg-green-600 text-white' }
+    },
+    {
+      key: 'sdt', label: 'Số điện thoại', value: profile.sdt,
+      inputType: 'tel', placeholder: 'Thêm số điện thoại của bạn',
+      hint: 'Chỗ nghỉ hoặc địa điểm tham quan bạn đặt sẽ liên lạc với bạn qua số này nếu cần.'
+    },
+    {
+      key: 'ngaySinh', label: 'Ngày sinh', value: profile.ngaySinh,
+      inputType: 'date', placeholder: 'Nhập ngày sinh của bạn',
+      hint: null
+    },
+    {
+      key: 'quocTich', label: 'Quốc tịch', value: profile.quocTich,
+      inputType: 'text', placeholder: 'Chọn vùng/quốc gia của bạn',
+      hint: null
+    },
+    {
+      key: 'gioiTinh', label: 'Giới tính', value: profile.gioiTinh,
+      inputType: 'select', placeholder: 'Chọn giới tính',
+      options: ['Nam', 'Nữ', 'Khác'],
+      hint: null
+    },
+    {
+      key: 'diaChi', label: 'Địa chỉ', value: profile.diaChi,
+      inputType: 'text', placeholder: 'Nhập địa chỉ',
+      hint: null
+    },
+  ];
+
+  const passportSummary = profile.soHoChieu
+    ? `${[profile.hoChieuHo, profile.hoChieuTen].filter(Boolean).join(' ')} · ${profile.soHoChieu}${profile.hoChieuNgayHetHan ? ` · HH: ${profile.hoChieuNgayHetHan}` : ''}`
+    : null;
+
   const TABS = [
     { id: 'info', label: '👤 Thông tin cá nhân' },
     { id: 'security', label: '🔒 Bảo mật' },
-    { id: 'bookings', label: `📋 Lịch sử đặt phòng (${bookings.length})` },
   ];
 
-  const bookingsByStatus = {
-    active: bookings.filter(b => ['Pending', 'Confirmed', 'CheckedIn'].includes(b.trangThai)),
-    done: bookings.filter(b => ['CheckedOut', 'Completed'].includes(b.trangThai)),
-    cancelled: bookings.filter(b => ['Expired', 'Cancelled', 'Rejected'].includes(b.trangThai)),
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 to-blue-50 py-10 px-4">
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
       {/* Toast */}
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl shadow-xl text-white text-sm font-medium transition-all
@@ -341,163 +480,296 @@ const UserProfilePage = () => {
 
       {/* Booking Detail Modal */}
       {selectedBookingId && (
-        <BookingDetailModal
-          bookingId={selectedBookingId}
-          onClose={() => setSelectedBookingId(null)}
-        />
+        <BookingDetailModal bookingId={selectedBookingId} onClose={() => setSelectedBookingId(null)} />
       )}
 
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Hero Card */}
-        <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-          <div className="h-32 bg-gradient-to-r from-indigo-500 via-purple-500 to-blue-500" />
-          <div className="px-8 pb-6 -mt-12 flex flex-col sm:flex-row items-start sm:items-end gap-4">
-            <img src={avatar(profile.hoTen)} alt="Avatar"
-              className="w-24 h-24 rounded-2xl border-4 border-white shadow-lg object-cover" />
-            <div className="flex-1 pb-1">
-              <h1 className="text-2xl font-extrabold text-gray-900">{profile.hoTen || 'Người dùng'}</h1>
-              <p className="text-gray-500 text-sm">{profile.email}</p>
+      {/* Avatar Modal */}
+      {showAvatarModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+             onClick={e => { if (e.target === e.currentTarget) setShowAvatarModal(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4">
+            <h3 className="text-lg font-bold text-gray-800">📷 Cập nhật ảnh đại diện</h3>
+
+            {/* Tabs */}
+            <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
+              {[{ id: 'file', label: '📁 Từ máy tính' }, { id: 'url', label: '🔗 Từ URL' }].map(t => (
+                <button key={t.id} onClick={() => { setAvatarTab(t.id); setAvatarFile(null); setAvatarPreview(null); setAvatarInput(''); }}
+                  className={`flex-1 py-2 text-sm font-semibold rounded-lg transition ${avatarTab === t.id ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}>
+                  {t.label}
+                </button>
+              ))}
             </div>
-            <div className="pb-1 flex flex-col items-end gap-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-bold ${roleColor[profile.chucVu] || 'bg-gray-100 text-gray-600'}`}>
-                {roleLabel[profile.chucVu] || profile.chucVu}
-              </span>
+
+            {/* File upload tab */}
+            {avatarTab === 'file' && (
+              <div className="space-y-3">
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-blue-300 rounded-xl cursor-pointer bg-blue-50 hover:bg-blue-100 transition">
+                  <input type="file" accept="image/*" className="hidden" onChange={handleAvatarFileChange} />
+                  <span className="text-3xl mb-1">📷</span>
+                  <span className="text-sm text-blue-600 font-semibold">Nhấn để chọn ảnh</span>
+                  <span className="text-xs text-gray-400">JPEG, PNG, GIF, WebP — tối đa 50MB</span>
+                </label>
+                {avatarPreview && (
+                  <div className="flex justify-center">
+                    <img src={avatarPreview} alt="Preview" className="w-28 h-28 rounded-full object-cover border-4 border-white shadow-lg" />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* URL tab */}
+            {avatarTab === 'url' && (
+              <div className="space-y-3">
+                <input type="url" value={avatarInput} onChange={e => setAvatarInput(e.target.value)}
+                  placeholder="https://example.com/avatar.jpg"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-400 outline-none" />
+                {avatarInput && (
+                  <div className="flex justify-center">
+                    <img src={avatarInput} alt="Preview" className="w-24 h-24 rounded-full object-cover border-4 border-gray-100 shadow"
+                         onError={e => { e.target.style.display = 'none'; }} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button onClick={handleSaveAvatar} disabled={saving}
+                className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition disabled:opacity-60">
+                {saving ? '⏳ Đang lưu...' : '💾 Lưu ảnh'}
+              </button>
+              <button onClick={() => { setShowAvatarModal(false); setAvatarFile(null); setAvatarPreview(null); setAvatarInput(''); }}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm font-semibold hover:bg-gray-50 transition">
+                Hủy
+              </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-3xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-extrabold text-gray-900">Thông tin cá nhân</h1>
+            <p className="text-gray-500 mt-1 text-sm">Cập nhật thông tin của bạn và tìm hiểu các thông tin này được sử dụng ra sao.</p>
+          </div>
+
+          {/* Avatar with camera button */}
+          <div className="relative flex-shrink-0 ml-4">
+            <img src={displayAvatar} alt="Avatar"
+              className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg" />
+            <button onClick={() => { setAvatarInput(profile.avatarUrl || ''); setShowAvatarModal(true); }}
+              className="absolute bottom-0 right-0 w-7 h-7 bg-gray-700 rounded-full flex items-center justify-center shadow-md hover:bg-gray-800 transition border-2 border-white"
+              title="Thay đổi ảnh đại diện">
+              <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-          <div className="flex border-b border-gray-100 overflow-x-auto">
-            {TABS.map(t => (
-              <button key={t.id} onClick={() => setActiveTab(t.id)}
-                className={`px-5 py-4 text-sm font-semibold whitespace-nowrap transition-colors ${
-                  activeTab === t.id
-                    ? 'text-indigo-600 border-b-2 border-indigo-500 bg-indigo-50'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}>
-                {t.label}
-              </button>
-            ))}
-          </div>
+        <div className="flex border-b border-gray-200 gap-1">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`px-4 py-3 text-sm font-semibold transition-colors ${
+                activeTab === t.id
+                  ? 'text-blue-700 border-b-2 border-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-          <div className="p-6">
-            {/* TAB: Thông tin */}
-            {activeTab === 'info' && (
-              <form onSubmit={handleSaveInfo} className="space-y-5 max-w-lg">
-                {[
-                  { label: 'Họ và tên', key: 'hoTen', type: 'text', required: true, placeholder: 'Nguyễn Văn A' },
-                  { label: 'Số điện thoại', key: 'sdt', type: 'tel', placeholder: '0901234567' },
-                ].map(({ label, key, type, required, placeholder }) => (
-                  <div key={key}>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</label>
-                    <input required={required} type={type} value={form[key]}
-                      onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-400 outline-none transition"
-                      placeholder={placeholder} />
+        {/* TAB: Thông tin */}
+        {activeTab === 'info' && (
+          <div className="space-y-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
+            {profileRows.map((row) => (
+              <div key={row.key}>
+                {/* View row */}
+                {editingField !== row.key ? (
+                  <div className="flex items-start justify-between px-6 py-5 gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 mb-1">{row.label}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-sm ${row.value ? 'text-gray-700' : 'text-gray-400'}`}>
+                          {row.value || row.placeholder}
+                        </span>
+                        {row.badge && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${row.badge.color}`}>
+                            {row.badge.text}
+                          </span>
+                        )}
+                      </div>
+                      {row.hint && <p className="text-xs text-gray-500 mt-1.5 max-w-md">{row.hint}</p>}
+                    </div>
+                    {!row.readOnly && (
+                      <button
+                        onClick={() => { setEditingField(row.key); setEditValue(row.value || ''); }}
+                        className="text-blue-600 text-sm font-semibold hover:text-blue-700 transition flex-shrink-0 mt-0.5">
+                        {row.actionLabel || 'Chỉnh sửa'}
+                      </button>
+                    )}
                   </div>
-                ))}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Email</label>
-                  <input value={profile.email} disabled
-                    className="w-full border border-gray-100 rounded-xl px-4 py-2.5 text-sm bg-gray-50 text-gray-400 cursor-not-allowed" />
-                  <p className="text-xs text-gray-400 mt-1">Email không thể thay đổi</p>
-                </div>
-                <button type="submit" disabled={saving}
-                  className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition disabled:opacity-60 shadow-sm">
-                  {saving ? '⏳ Đang lưu...' : '💾 Lưu thay đổi'}
-                </button>
-              </form>
-            )}
-
-            {/* TAB: Bảo mật */}
-            {activeTab === 'security' && (
-              <form onSubmit={handleChangePw} className="space-y-5 max-w-lg">
-                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
-                  🔐 Mật khẩu mới cần ít nhất 8 ký tự
-                </div>
-                {[
-                  { key: 'matKhauCu', label: 'Mật khẩu hiện tại', show: 'cu' },
-                  { key: 'matKhauMoi', label: 'Mật khẩu mới', show: 'moi' },
-                  { key: 'xacNhanMatKhau', label: 'Xác nhận mật khẩu mới', show: 'xn' },
-                ].map(({ key, label, show }) => (
-                  <div key={key}>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</label>
-                    <div className="relative">
-                      <input type={showPw[show] ? 'text' : 'password'} value={pwForm[key]}
-                        onChange={e => setPwForm(f => ({ ...f, [key]: e.target.value }))} required
-                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
-                        placeholder="••••••••" />
-                      <button type="button" onClick={() => setShowPw(p => ({ ...p, [show]: !p[show] }))}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                        {showPw[show] ? '🙈' : '👁️'}
+                ) : (
+                  /* Edit row */
+                  <div className="px-6 py-5 bg-blue-50/30 space-y-3">
+                    <label className="block text-sm font-semibold text-gray-700">{row.label}</label>
+                    {row.inputType === 'select' ? (
+                      <select value={editValue} onChange={e => setEditValue(e.target.value)}
+                        className="w-full max-w-sm border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none bg-white">
+                        <option value="">{row.placeholder}</option>
+                        {row.options?.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        type={row.inputType}
+                        value={editValue}
+                        onChange={e => setEditValue(e.target.value)}
+                        placeholder={row.placeholder}
+                        className="w-full max-w-sm border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+                        autoFocus
+                      />
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        disabled={saving}
+                        onClick={() => saveField({ [row.key]: editValue })}
+                        className="px-5 py-2 bg-blue-700 text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition disabled:opacity-60">
+                        {saving ? 'Đang lưu...' : 'Lưu'}
+                      </button>
+                      <button onClick={() => setEditingField(null)}
+                        className="px-5 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-50 transition">
+                        Hủy
                       </button>
                     </div>
                   </div>
-                ))}
-                <button type="submit" disabled={saving}
-                  className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition disabled:opacity-60 shadow-sm">
-                  {saving ? '⏳ Đang xử lý...' : '🔑 Đổi mật khẩu'}
-                </button>
-              </form>
-            )}
-
-            {/* TAB: Lịch sử đặt phòng */}
-            {activeTab === 'bookings' && (
-              <div className="space-y-6">
-                {bookings.length === 0 ? (
-                  <div className="text-center py-16">
-                    <p className="text-5xl mb-4">🛏️</p>
-                    <p className="text-gray-500 font-medium">Bạn chưa có đặt phòng nào</p>
-                    <button onClick={() => navigate('/')}
-                      className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
-                      Tìm khách sạn ngay
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    {/* Active bookings */}
-                    {bookingsByStatus.active.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
-                          Đang hoạt động ({bookingsByStatus.active.length})
-                        </h3>
-                        <div className="space-y-3">
-                          {bookingsByStatus.active.map(b => (
-                            <BookingCard key={b.id} b={b} onDetail={() => setSelectedBookingId(b.id)} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {/* Done */}
-                    {bookingsByStatus.done.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-500 mb-3">✅ Đã hoàn thành ({bookingsByStatus.done.length})</h3>
-                        <div className="space-y-3">
-                          {bookingsByStatus.done.map(b => (
-                            <BookingCard key={b.id} b={b} onDetail={() => setSelectedBookingId(b.id)} muted />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {/* Cancelled */}
-                    {bookingsByStatus.cancelled.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-400 mb-3">🚫 Đã hủy / Hết hạn ({bookingsByStatus.cancelled.length})</h3>
-                        <div className="space-y-3">
-                          {bookingsByStatus.cancelled.map(b => (
-                            <BookingCard key={b.id} b={b} onDetail={() => setSelectedBookingId(b.id)} muted />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
                 )}
+              </div>
+            ))}
+          </div>
+          {/* Passport Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex items-start justify-between px-6 py-5 gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-800 mb-1">Thông tin hộ chiếu</p>
+                <p className={`text-sm ${passportSummary ? 'text-gray-700' : 'text-gray-400'}`}>
+                  {passportSummary || 'Lưu thông tin hộ chiếu để sử dụng cho lần tới khi đặt chỗ nghỉ, chuyến bay hoặc hoạt động tham quan.'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (!showPassportForm) {
+                    setPassportForm({
+                      soHoChieu: profile.soHoChieu || '',
+                      hoChieuTen: profile.hoChieuTen || '',
+                      hoChieuHo: profile.hoChieuHo || '',
+                      hoChieuQuocGia: profile.hoChieuQuocGia || '',
+                      hoChieuNgayHetHan: profile.hoChieuNgayHetHan || '',
+                    });
+                  }
+                  setShowPassportForm(f => !f);
+                }}
+                className="text-blue-600 text-sm font-semibold hover:text-blue-700 transition flex-shrink-0 mt-0.5">
+                {showPassportForm ? 'Hủy' : (passportSummary ? 'Chỉnh sửa' : 'Thêm hộ chiếu')}
+              </button>
+            </div>
+
+            {showPassportForm && (
+              <div className="px-6 pb-6 border-t border-gray-100 pt-5 space-y-4 bg-blue-50/20">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Tên <span className="text-red-500">*</span></label>
+                    <input type="text" value={passportForm.hoChieuTen}
+                      onChange={e => setPassportForm(f => ({ ...f, hoChieuTen: e.target.value }))}
+                      placeholder="Nhập tên"
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none" />
+                    <p className="text-xs text-gray-400 mt-1">Vui lòng nhập chính xác tên như trên hộ chiếu</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Họ <span className="text-red-500">*</span></label>
+                    <input type="text" value={passportForm.hoChieuHo}
+                      onChange={e => setPassportForm(f => ({ ...f, hoChieuHo: e.target.value }))}
+                      placeholder="Nhập họ"
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Quốc gia cấp giấy tờ <span className="text-red-500">*</span></label>
+                    <input type="text" value={passportForm.hoChieuQuocGia}
+                      onChange={e => setPassportForm(f => ({ ...f, hoChieuQuocGia: e.target.value }))}
+                      placeholder="Việt Nam"
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Số hộ chiếu <span className="text-red-500">*</span></label>
+                    <input type="text" value={passportForm.soHoChieu}
+                      onChange={e => setPassportForm(f => ({ ...f, soHoChieu: e.target.value }))}
+                      placeholder="Nhập mã số giấy tờ"
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none" />
+                  </div>
+                </div>
+                <div className="max-w-xs">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Ngày hết hạn <span className="text-red-500">*</span></label>
+                  <input type="date" value={passportForm.hoChieuNgayHetHan}
+                    onChange={e => setPassportForm(f => ({ ...f, hoChieuNgayHetHan: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none" />
+                  <p className="text-xs text-gray-400 mt-1.5">Chúng tôi sẽ lưu trữ và bảo mật dữ liệu này.</p>
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button disabled={saving}
+                    onClick={async () => { await saveField(passportForm); setShowPassportForm(false); }}
+                    className="px-5 py-2 bg-blue-700 text-white rounded-lg text-sm font-semibold hover:bg-blue-800 transition disabled:opacity-60">
+                    {saving ? 'Đang lưu...' : 'Lưu hộ chiếu'}
+                  </button>
+                  <button onClick={() => setShowPassportForm(false)}
+                    className="px-5 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-50 transition">
+                    Hủy
+                  </button>
+                </div>
               </div>
             )}
           </div>
-        </div>
+          </div>
+        )}
+
+        {/* TAB: Bảo mật */}
+        {activeTab === 'security' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+            <form onSubmit={handleChangePw} className="p-6 space-y-5 max-w-lg">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
+                🔐 Mật khẩu mới cần ít nhất 8 ký tự, chứa chữ hoa, số và ký tự @
+              </div>
+              {[
+                { key: 'matKhauCu', label: 'Mật khẩu hiện tại', show: 'cu' },
+                { key: 'matKhauMoi', label: 'Mật khẩu mới', show: 'moi' },
+                { key: 'xacNhanMatKhau', label: 'Xác nhận mật khẩu mới', show: 'xn' },
+              ].map(({ key, label, show }) => (
+                <div key={key}>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</label>
+                  <div className="relative">
+                    <input type={showPw[show] ? 'text' : 'password'} value={pwForm[key]}
+                      onChange={e => setPwForm(f => ({ ...f, [key]: e.target.value }))} required
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+                      placeholder="••••••••" />
+                    <button type="button" onClick={() => setShowPw(p => ({ ...p, [show]: !p[show] }))}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showPw[show] ? '🙈' : '👁️'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button type="submit" disabled={saving}
+                className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition disabled:opacity-60 shadow-sm">
+                {saving ? '⏳ Đang xử lý...' : '🔑 Đổi mật khẩu'}
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -529,7 +801,7 @@ const BookingCard = ({ b, onDetail, muted }) => {
               </p>
             </div>
             <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${statusBadge}`}>
-              {b.trangThai}
+              {STATUS_LABELS[b.trangThai] || b.trangThai}
             </span>
           </div>
 
