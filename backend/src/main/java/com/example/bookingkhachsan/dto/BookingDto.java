@@ -114,11 +114,15 @@ public class BookingDto {
         private Integer tang;
         private String soPhong;
         private String loaiPhong;
+        private Integer khachSanId;
+        private String tenKhachSan;
+        private Boolean isReviewed;
 
         // Thong tin nguoi dat
         private Integer nguoiDungId;
         private String hoTenKhach;
         private String emailKhach;
+        private String sdtKhach;
 
         // Lich dat
         private LocalDate ngayDen;
@@ -194,5 +198,65 @@ public class BookingDto {
         // Tien coc du tinh (tiLeCoc% * tongTienDuTinh)
         private BigDecimal tiLeCocKhachSan;  // To le % (VD: 30.00)
         private BigDecimal tienCocDuTinh;    // So tien coc cu the
+    }
+
+    /** Chi tiet mot dong dich vu trong hoa don */
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class InvoiceServiceItem {
+        private String tenDichVu;
+        private Integer soLuong;
+        private BigDecimal donGia;
+        private BigDecimal thanhTien;
+    }
+
+    /** Chi tiet mot dong phu thu trong hoa don */
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class InvoiceSurchargeItem {
+        private String loaiPhuThu;
+        private BigDecimal soTien;
+    }
+
+    /** Hoa don chi tiet sau khi check-in / checkout */
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class InvoiceResponse {
+        private Integer bookingId;
+        private String maDatPhong;
+        private String trangThai;
+        private String trangThaiThanhToan;
+
+        // Thong tin khach
+        private String hoTenKhach;
+        private String emailKhach;
+        private String sdtKhach;
+
+        // Thong tin phong
+        private String tenPhong;
+        private String loaiPhong;
+        private LocalDate ngayDen;
+        private LocalDate ngayDi;
+        private Integer soNgay;
+
+        // Tai chinh
+        private BigDecimal giaPhongMot;
+        private BigDecimal tienPhong;       // giaPhong * soNgay
+        private List<InvoiceServiceItem> dichVus;
+        private List<InvoiceSurchargeItem> phuThus;
+        private BigDecimal tienDichVu;
+        private BigDecimal tienPhuThu;
+        private BigDecimal tongCong;
+        private BigDecimal tienCoc;
+        private String trangThaiCoc;
+
+        // Phuong thuc thanh toan
+        private String phuongThucThanhToan;
     }
 }

@@ -113,4 +113,65 @@ public class HotelController {
         service.deleteHotel(id);
         return ResponseEntity.ok().build();
     }
+
+    /**
+     * Upload nhiều hình ảnh từ file máy tính cho khách sạn.
+     * Lưu file vào uploads/hotel-images/{id}/ và thêm URL vào danh sách hinhAnhs của khách sạn.
+     */
+    @PostMapping("/{id}/images/upload")
+    public ResponseEntity<?> uploadHotelImages(
+            @PathVariable Integer id,
+            @RequestParam("files") java.util.List<org.springframework.web.multipart.MultipartFile> files,
+            @AuthenticationPrincipal NguoiDung currentUser) {
+
+        if (files == null || files.isEmpty()) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", "Danh sách file không được để trống!"));
+        }
+
+        KhachSan hotel = service.getDetails(id);
+        java.util.List<String> imgs = hotel.getHinhAnhs() != null
+                ? new java.util.ArrayList<>(hotel.getHinhAnhs())
+                : new java.util.ArrayList<>();
+
+        java.util.List<String> uploadedUrls = new java.util.ArrayList<>();
+
+        try {
+            String uploadDir = System.getProperty("user.dir") + "/uploads/hotel-images/" + id;
+            java.nio.file.Path uploadPath = java.nio.file.Paths.get(uploadDir);
+            java.nio.file.Files.createDirectories(uploadPath);
+
+            for (org.springframework.web.multipart.MultipartFile file : files) {
+                if (file.isEmpty()) continue;
+                String contentType = file.getContentType();
+                if (contentType == null || !contentType.startsWith("image/")) continue;
+
+                String ext = "";
+                String originalName = file.getOriginalFilename();
+                if (originalName != null && originalName.contains(".")) {
+                    ext = originalName.substring(originalName.lastIndexOf('.'));
+                }
+                String fileName = "hotel_" + id + "_" + java.util.UUID.randomUUID().toString().substring(0, 8) + ext;
+                java.nio.file.Path filePath = uploadPath.resolve(fileName);
+                java.nio.file.Files.copy(file.getInputStream(), filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+                String imageUrl = "/uploads/hotel-images/" + id + "/" + fileName;
+                imgs.add(imageUrl);
+                uploadedUrls.add(imageUrl);
+            }
+
+            if (uploadedUrls.isEmpty()) {
+                return ResponseEntity.badRequest().body(java.util.Map.of("error", "Không có file ảnh nào hợp lệ được tải lên!"));
+            }
+
+            com.example.bookingkhachsan.dto.HotelDto req = new com.example.bookingkhachsan.dto.HotelDto();
+            req.setHinhAnhs(imgs);
+            req.setHinhAnhBia(hotel.getHinhAnhBia() != null && !hotel.getHinhAnhBia().isEmpty()
+                    ? hotel.getHinhAnhBia() : uploadedUrls.get(0));
+            service.updateHotelSettings(id, req);
+
+            return ResponseEntity.ok(java.util.Map.of("urls", uploadedUrls, "message", "Upload thành công " + uploadedUrls.size() + " ảnh!"));
+        } catch (java.io.IOException e) {
+            return ResponseEntity.internalServerError().body(java.util.Map.of("error", "Lỗi lưu file: " + e.getMessage()));
+        }
+    }
 }

@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface DanhGiaRepository extends JpaRepository<DanhGia, Integer> {
     List<DanhGia> findByKhachSanIdAndTrangThai(Integer khachSanId, String trangThai);
+    boolean existsByPhieuDatPhongId(Integer phieuDatPhongId);
 }

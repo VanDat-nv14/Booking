@@ -37,4 +37,22 @@ public interface PhieuDatPhongRepository extends JpaRepository<PhieuDatPhong, In
             @Param("checkIn") LocalDate checkIn,
             @Param("checkOut") LocalDate checkOut
     );
+
+    /**
+     * Kiem tra user da co booking ACTIVE cho cung phong trong khoang ngay hay chua.
+     * Active = chua bi huy/het han/tu choi/hoan thanh
+     */
+    @Query("""
+        SELECT COUNT(pdp) FROM PhieuDatPhong pdp
+        WHERE pdp.phong.id = :phongId
+          AND pdp.nguoiDung.id = :userId
+          AND pdp.trangThai NOT IN ('Cancelled', 'Expired', 'Rejected', 'NoShow', 'Completed')
+          AND (pdp.ngayDen < :checkOut AND pdp.ngayDi > :checkIn)
+        """)
+    long countActiveUserBookingsForRoom(
+            @Param("phongId") Integer phongId,
+            @Param("userId") Integer userId,
+            @Param("checkIn") LocalDate checkIn,
+            @Param("checkOut") LocalDate checkOut
+    );
 }

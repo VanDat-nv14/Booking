@@ -35,6 +35,7 @@ public class BookingService {
     private final PhuThuRepository phuThuRepo;
     private final PhongKhaDungRepository phongKhaDungRepo;
     private final LichSuThanhToanRepository lichSuRepo;
+    private final DanhGiaRepository danhGiaRepo;
     private final JdbcTemplate jdbcTemplate;
 
     // Hoa hong mac dinh 5% neu la mo hinh san
@@ -144,7 +145,15 @@ public class BookingService {
         long blocked = phongKhaDungRepo.countUnavailableDays(
                 request.getPhongId(), request.getNgayDen(), request.getNgayDi(), null);
         if (blocked > 0) {
-            throw new RuntimeException("Phong da duoc dat trong khoang thoi gian nay. Vui long chon ngay khac!");
+            throw new RuntimeException("Phòng đã được đặt trong khoảng thời gian này. Vui lòng chọn ngày khác!");
+        }
+
+        // Kiem tra khach hang khong duoc dat cung phong trong khoang ngay dang co booking active
+        long userOverlap = bookingRepo.countActiveUserBookingsForRoom(
+                request.getPhongId(), request.getNguoiDungId(),
+                request.getNgayDen(), request.getNgayDi());
+        if (userOverlap > 0) {
+            throw new RuntimeException("Bạn đã có đặt phòng cho phòng này trong khoảng thời gian này. Vui lòng hoàn thành hoặc hủy đặt phòng cũ trước khi đặt lại!");
         }
 
         NguoiDung user = userRepo.findById(request.getNguoiDungId())
@@ -366,6 +375,7 @@ public class BookingService {
         BigDecimal pctPhiHuy = lp.getPhiHuyPct() != null ? lp.getPhiHuyPct() : BigDecimal.ZERO;
 
         if (gioConLai >= gioMienPhi || pctPhiHuy.compareTo(BigDecimal.ZERO) == 0) {
+            phiHuy = BigDecimal.ZERO;
             soTienHoan = giaPhong;  // Hoan 100%
         } else {
             phiHuy = giaPhong.multiply(pctPhiHuy).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
@@ -422,11 +432,38 @@ public class BookingService {
                 .multiply(pctPhiHuy).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
 
         booking.setTrangThai("NoShow");
-        booking.setTrangThaiThanhToan("ThuPhiNoShow");
-        bookingRepo.save(booking);
 
-        saveLichSu(booking, phiNoShow, "ThuPhiNoShow", "HeThong", "ThanhCong",
-                "Phi No-show " + pctPhiHuy + "% tren gia phong", getCurrentUserEmail());
+        String executor = getCurrentUserEmail();
+
+        // Kiem tra xem khach hang da thanh toan 100% qua ChuyenKhoan hay chua
+        if ("DaThanhToan".equals(booking.getTrangThaiThanhToan()) && 
+            "ChuyenKhoan".equals(booking.getPhuongThucThanhToan())) {
+            
+            // Neu da thanh toan 100%, phi No-show se duoc tru vao tienCoc da cọc ban dau
+            BigDecimal tienCoc = booking.getTienCoc() != null ? booking.getTienCoc() : BigDecimal.ZERO;
+            
+            // Hoan lai phan tien chenh lech (100% - Tien coc)
+            BigDecimal soTienHoan = booking.getThanhTien().subtract(tienCoc);
+            if (soTienHoan.compareTo(BigDecimal.ZERO) < 0) soTienHoan = BigDecimal.ZERO;
+            
+            booking.setTrangThaiThanhToan(soTienHoan.compareTo(BigDecimal.ZERO) > 0 ? "DaHoanTien" : "ThuPhiNoShow");
+            
+            if (soTienHoan.compareTo(BigDecimal.ZERO) > 0) {
+                saveLichSu(booking, soTienHoan, "HoanTien", "HeThong", "ThanhCong",
+                        "Hoan tien No-show (phi vắng mặt: " + tienCoc.toPlainString() + ")", executor);
+            }
+            if (tienCoc.compareTo(BigDecimal.ZERO) > 0) {
+                saveLichSu(booking, tienCoc, "ThuPhiNoShow", "HeThong", "ThanhCong",
+                        "Thu phi No-show tuong duong tien coc", executor);
+            }
+        } else {
+            // Truong hop khong phai ChuyenKhoan 100%
+            booking.setTrangThaiThanhToan("ThuPhiNoShow");
+            saveLichSu(booking, phiNoShow, "ThuPhiNoShow", "HeThong", "ThanhCong",
+                    "Phi No-show " + pctPhiHuy + "% tren gia phong", executor);
+        }
+
+        bookingRepo.save(booking);
 
         return toBookingResponse(booking);
     }
@@ -443,15 +480,20 @@ public class BookingService {
         // Tinh toan hoa don cuoi (phong goc + dich vu + phu thu)
         BigDecimal tienDV = ctsdRepo.findAll().stream()
                 .filter(ct -> ct.getPhieuDatPhong().getId().equals(bookingId))
-                .map(ct -> ct.getDonGiaLucDat().multiply(BigDecimal.valueOf(ct.getSoLuong())))
+                .map(ct -> {
+                    BigDecimal donGia = ct.getDonGiaLucDat() != null ? ct.getDonGiaLucDat() : BigDecimal.ZERO;
+                    int sl = ct.getSoLuong() != null ? ct.getSoLuong() : 0;
+                    return donGia.multiply(BigDecimal.valueOf(sl));
+                })
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal tienPT = phuThuRepo.findAll().stream()
                 .filter(pt -> pt.getPhieuDatPhong().getId().equals(bookingId))
-                .map(PhuThu::getSoTien)
+                .map(pt -> pt.getSoTien() != null ? pt.getSoTien() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal tongCuoi = booking.getGiaPhongGoc().add(tienDV).add(tienPT);
+        BigDecimal giaPhongGoc = booking.getGiaPhongGoc() != null ? booking.getGiaPhongGoc() : (booking.getThanhTien() != null ? booking.getThanhTien() : BigDecimal.ZERO);
+        BigDecimal tongCuoi = giaPhongGoc.add(tienDV).add(tienPT);
 
         booking.setThanhTien(tongCuoi);
         booking.setTrangThai("CheckedOut");
@@ -527,6 +569,18 @@ public class BookingService {
         phuThuRepo.save(pt);
     }
 
+    @Transactional(readOnly = true)
+    public BookingDto.BookingResponse getBookingByIdResponse(Integer id) {
+        return toBookingResponse(findBookingById(id));
+    }
+
+    @Transactional(readOnly = true)
+    public BookingDto.BookingResponse getBookingByCodeResponse(String code) {
+        PhieuDatPhong booking = bookingRepo.findByMaDatPhong(code)
+                .orElseThrow(() -> new RuntimeException("Khong tim thay phieu dat phong: " + code));
+        return toBookingResponse(booking);
+    }
+
     public PhieuDatPhong getBookingById(Integer id) {
         return findBookingById(id);
     }
@@ -562,6 +616,87 @@ public class BookingService {
                         .ngayGiaoDich(ls.getNgayGiaoDich())
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Tinh toan va tra ve hoa don chi tiet cho mot booking.
+     * Co the goi bat ky luc nao sau khi tao booking.
+     */
+    @Transactional(readOnly = true)
+    public BookingDto.InvoiceResponse getInvoice(Integer bookingId) {
+        PhieuDatPhong b = findBookingById(bookingId);
+        long soNgay = b.getNgayDen() != null && b.getNgayDi() != null
+                ? ChronoUnit.DAYS.between(b.getNgayDen(), b.getNgayDi()) : 1;
+        if (soNgay < 1) soNgay = 1;
+
+        BigDecimal giaPhongMot = b.getGiaPhongGoc() != null ? b.getGiaPhongGoc() : BigDecimal.ZERO;
+        BigDecimal tienPhong = giaPhongMot.multiply(BigDecimal.valueOf(soNgay));
+
+        // Lay danh sach dich vu su dung
+        List<ChiTietSuDungDV> ctList = ctsdRepo.findAll().stream()
+                .filter(ct -> ct.getPhieuDatPhong().getId().equals(bookingId))
+                .collect(Collectors.toList());
+
+        List<BookingDto.InvoiceServiceItem> dichVus = ctList.stream().map(ct -> {
+            BigDecimal donGia = ct.getDonGiaLucDat() != null ? ct.getDonGiaLucDat() : BigDecimal.ZERO;
+            int sl = ct.getSoLuong() != null ? ct.getSoLuong() : 1;
+            return BookingDto.InvoiceServiceItem.builder()
+                    .tenDichVu(ct.getDichVu() != null ? ct.getDichVu().getTen() : "Dịch vụ")
+                    .soLuong(sl)
+                    .donGia(donGia)
+                    .thanhTien(donGia.multiply(BigDecimal.valueOf(sl)))
+                    .build();
+        }).collect(Collectors.toList());
+
+        BigDecimal tienDV = dichVus.stream()
+                .map(BookingDto.InvoiceServiceItem::getThanhTien)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Lay danh sach phu thu
+        List<PhuThu> ptList = phuThuRepo.findAll().stream()
+                .filter(pt -> pt.getPhieuDatPhong().getId().equals(bookingId))
+                .collect(Collectors.toList());
+
+        List<BookingDto.InvoiceSurchargeItem> phuThus = ptList.stream().map(pt ->
+                BookingDto.InvoiceSurchargeItem.builder()
+                        .loaiPhuThu(pt.getLoaiPhuThu())
+                        .soTien(pt.getSoTien() != null ? pt.getSoTien() : BigDecimal.ZERO)
+                        .build()
+        ).collect(Collectors.toList());
+
+        BigDecimal tienPT = phuThus.stream()
+                .map(BookingDto.InvoiceSurchargeItem::getSoTien)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal tongCong = tienPhong.add(tienDV).add(tienPT);
+
+        NguoiDung kh = b.getNguoiDung();
+        Phong phong = b.getPhong();
+
+        return BookingDto.InvoiceResponse.builder()
+                .bookingId(b.getId())
+                .maDatPhong(b.getMaDatPhong())
+                .trangThai(b.getTrangThai())
+                .trangThaiThanhToan(b.getTrangThaiThanhToan())
+                .hoTenKhach(kh != null ? kh.getHoTen() : null)
+                .emailKhach(kh != null ? kh.getEmail() : null)
+                .sdtKhach(kh != null ? kh.getSdt() : null)
+                .tenPhong(phong != null ? phong.getTen() : null)
+                .loaiPhong(phong != null && phong.getLoaiPhong() != null ? phong.getLoaiPhong().getTen() : null)
+                .ngayDen(b.getNgayDen())
+                .ngayDi(b.getNgayDi())
+                .soNgay((int) soNgay)
+                .giaPhongMot(giaPhongMot)
+                .tienPhong(tienPhong)
+                .dichVus(dichVus)
+                .phuThus(phuThus)
+                .tienDichVu(tienDV)
+                .tienPhuThu(tienPT)
+                .tongCong(tongCong)
+                .tienCoc(b.getTienCoc())
+                .trangThaiCoc(b.getTrangThaiCoc())
+                .phuongThucThanhToan(b.getPhuongThucThanhToan())
+                .build();
     }
 
     // =====================================================
@@ -607,6 +742,7 @@ public class BookingService {
     private BookingDto.BookingResponse toBookingResponse(PhieuDatPhong b) {
         long soNgay = b.getNgayDen() != null && b.getNgayDi() != null
                 ? ChronoUnit.DAYS.between(b.getNgayDen(), b.getNgayDi()) : 0;
+        NguoiDung kh = b.getNguoiDung();
         return BookingDto.BookingResponse.builder()
                 .id(b.getId())
                 .maDatPhong(b.getMaDatPhong())
@@ -619,9 +755,14 @@ public class BookingService {
                 .soPhong(b.getPhong() != null ? b.getPhong().getSoPhong() : null)
                 .loaiPhong(b.getPhong() != null && b.getPhong().getLoaiPhong() != null
                         ? b.getPhong().getLoaiPhong().getTen() : null)
-                .nguoiDungId(b.getNguoiDung() != null ? b.getNguoiDung().getId() : null)
-                .hoTenKhach(b.getNguoiDung() != null ? b.getNguoiDung().getHoTen() : null)
-                .emailKhach(b.getNguoiDung() != null ? b.getNguoiDung().getEmail() : null)
+                .khachSanId(b.getPhong() != null && b.getPhong().getKhachSan() != null
+                        ? b.getPhong().getKhachSan().getId() : null)
+                .tenKhachSan(b.getPhong() != null && b.getPhong().getKhachSan() != null
+                        ? b.getPhong().getKhachSan().getTen() : null)
+                .nguoiDungId(kh != null ? kh.getId() : null)
+                .hoTenKhach(kh != null ? kh.getHoTen() : null)
+                .emailKhach(kh != null ? kh.getEmail() : null)
+                .sdtKhach(kh != null ? kh.getSdt() : null)
                 .ngayDen(b.getNgayDen())
                 .ngayDi(b.getNgayDi())
                 .soNgay((int) soNgay)
@@ -634,6 +775,7 @@ public class BookingService {
                 .pendingExpiresAt(b.getPendingExpiresAt())
                 .ngayDat(b.getNgayDat())
                 .ghiChuKhach(b.getGhiChuKhach())
+                .isReviewed(danhGiaRepo.existsByPhieuDatPhongId(b.getId()))
                 .build();
     }
     /**

@@ -11,7 +11,7 @@ const HotelCard = ({ hotel }) => {
   const cover = hotel.hinhAnhBia || hotel.viTri?.hinhAnh || null;
 
   return (
-    <Link to={`/hotels/${hotel.id}`} className="group bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col">
+    <Link to={`/hotels/${hotel.id}`} target="_blank" rel="noopener noreferrer" className="group bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col">
       {/* Image */}
       <div className="w-full h-52 overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-200 relative flex-shrink-0">
         {cover
@@ -93,27 +93,13 @@ const HomePage = () => {
     }).catch(() => {}).finally(() => setLoadingHotels(false));
   }, []);
 
-  const handleSearch = async () => {
-    if (!selectedLocation) {
-      navigate(`/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`);
-      return;
-    }
-    setSearching(true);
-    try {
-      const res = await axiosClient.get('/hotels/search', {
-        params: {
-          viTriId: selectedLocation || undefined,
-          checkIn: checkIn || undefined,
-          checkOut: checkOut || undefined,
-        }
-      });
-      setSearchedHotels(res.data || []);
-      document.getElementById('hotel-list')?.scrollIntoView({ behavior: 'smooth' });
-    } catch {
-      navigate(`/search?viTriId=${selectedLocation}&checkIn=${checkIn}&checkOut=${checkOut}`);
-    } finally {
-      setSearching(false);
-    }
+  const handleSearch = () => {
+    const params = new URLSearchParams();
+    if (selectedLocation) params.set('viTriId', selectedLocation);
+    if (checkIn) params.set('checkIn', checkIn);
+    if (checkOut) params.set('checkOut', checkOut);
+    params.set('guests', guests);
+    navigate(`/search?${params.toString()}`);
   };
 
   const displayedHotels = searchedHotels !== null ? searchedHotels : hotels;

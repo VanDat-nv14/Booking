@@ -18,6 +18,9 @@ public class ReviewService {
 
     public void createReview(ReviewDto request) {
         PhieuDatPhong booking = bookingRepo.findById(request.getPhieuDatPhongId()).orElseThrow(() -> new RuntimeException("Booking not found"));
+        if (danhGiaRepo.existsByPhieuDatPhongId(booking.getId())) {
+            throw new RuntimeException("Đơn đặt phòng này đã được đánh giá.");
+        }
         KhachSan hotel = hotelRepo.findById(request.getKhachSanId()).orElseThrow(() -> new RuntimeException("Hotel not found"));
         NguoiDung user = userRepo.findById(request.getNguoiDungId()).orElseThrow(() -> new RuntimeException("User not found"));
 

@@ -13,6 +13,7 @@ import Placeholder from './pages/Placeholder';
 import { AuthProvider } from './context/AuthContext';
 
 import UserProfilePage from './pages/UserProfilePage';
+import BookingHistoryPage from './pages/BookingHistoryPage';
 import SearchPage from './pages/SearchPage';
 import HotelDetailPage from './pages/HotelDetailPage';
 import HotelMapPage from './pages/HotelMapPage';
@@ -51,7 +52,8 @@ function App() {
 
               <Route element={<PrivateRoute />}>
                   <Route path="/booking" element={<BookingPage />} />
-                   <Route path="/user/profile" element={<UserProfilePage />} />
+                  <Route path="/user/profile" element={<UserProfilePage />} />
+                  <Route path="/user/bookings" element={<BookingHistoryPage />} />
               </Route>
 
             </Routes>

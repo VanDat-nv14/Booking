@@ -34,6 +34,11 @@ const Navbar = () => {
         ? user.hoTen.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
         : (user?.email?.[0]?.toUpperCase() || 'U');
 
+    const BACKEND = 'http://localhost:8080';
+    const avatarSrc = user?.avatarUrl
+        ? (user.avatarUrl.startsWith('http') ? user.avatarUrl : BACKEND + user.avatarUrl)
+        : null;
+
     const menuItems = token ? [
         ...(user?.role === 'Admin' || user?.role === 'ADMIN' ? [
             { icon: '🛡️', label: 'Quản trị hệ thống', to: '/admin/dashboard' },
@@ -42,7 +47,7 @@ const Navbar = () => {
             { icon: '🏨', label: 'Quản lý khách sạn', to: '/manager/dashboard' },
         ] : []),
         { icon: '👤', label: 'Tài khoản cá nhân', to: '/user/profile' },
-        { icon: '📋', label: 'Đặt phòng của tôi', to: '/user/profile#bookings' },
+        { icon: '📋', label: 'Lịch sử đặt phòng', to: '/user/bookings' },
         { icon: '⭐', label: 'Đánh giá của tôi', to: '/user/profile' },
     ] : [];
 
@@ -89,10 +94,16 @@ const Navbar = () => {
                                 onClick={() => setDropdownOpen(o => !o)}
                                 className="flex items-center gap-2 group pl-2 pr-3 py-1 rounded-full hover:bg-white/10 transition-colors focus:outline-none"
                             >
-                                {/* Avatar circle */}
+                                {/* Avatar circle / image */}
+                                {avatarSrc ? (
+                                    <img src={avatarSrc} alt="avatar"
+                                        className="w-8 h-8 rounded-full object-cover shadow-sm ring-2 ring-white/60"
+                                        onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}
+                                    />
+                                ) : null}
                                 <div
                                     className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-sm ring-2 ring-white/40"
-                                    style={{ backgroundColor: '#0071c2', color: '#fff' }}
+                                    style={{ backgroundColor: '#0071c2', color: '#fff', display: avatarSrc ? 'none' : 'flex' }}
                                 >
                                     {initials}
                                 </div>
@@ -117,12 +128,18 @@ const Navbar = () => {
                                     <div className="px-4 py-3 border-b border-gray-100"
                                          style={{ background: 'linear-gradient(135deg, #003580 0%, #0071c2 100%)' }}>
                                         <div className="flex items-center gap-3">
-                                            <div
-                                                className="w-10 h-10 rounded-full flex items-center justify-center text-base font-bold shadow ring-2 ring-white/30"
-                                                style={{ backgroundColor: '#fff', color: '#003580' }}
-                                            >
-                                                {initials}
-                                            </div>
+                                            {avatarSrc ? (
+                                                <img src={avatarSrc} alt="avatar"
+                                                    className="w-10 h-10 rounded-full object-cover shadow ring-2 ring-white/50"
+                                                />
+                                            ) : (
+                                                <div
+                                                    className="w-10 h-10 rounded-full flex items-center justify-center text-base font-bold shadow ring-2 ring-white/30"
+                                                    style={{ backgroundColor: '#fff', color: '#003580' }}
+                                                >
+                                                    {initials}
+                                                </div>
+                                            )}
                                             <div className="min-w-0">
                                                 <p className="text-white font-bold text-sm truncate">
                                                     {user?.hoTen || 'Người dùng'}

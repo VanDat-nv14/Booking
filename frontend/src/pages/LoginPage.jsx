@@ -62,7 +62,7 @@ const LoginPage = () => {
                     />
                     <div className="absolute inset-0 bg-blue-900 bg-opacity-40 flex items-center justify-center">
                         <div className="text-white text-center p-8">
-                            <h2 className="text-3xl font-bold mb-2">Booking Khach San</h2>
+                            <h2 className="text-3xl font-bold mb-2">Đặt Phòng Khách Sạn</h2>
                             <p className="text-lg">Trải nghiệm kỳ nghỉ tuyệt vời nhất</p>
                         </div>
                     </div>
@@ -87,7 +87,7 @@ const LoginPage = () => {
                             <input 
                                 type="email" 
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                                placeholder="name@company.com"
+                                placeholder="tenemail@example.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required

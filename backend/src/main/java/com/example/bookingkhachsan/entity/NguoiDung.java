@@ -2,6 +2,7 @@ package com.example.bookingkhachsan.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -30,6 +31,39 @@ public class NguoiDung implements UserDetails {
 
     @Column(name = "sdt")
     private String sdt;
+
+    @Column(name = "ten_hien_thi")
+    private String tenHienThi;
+
+    @Column(name = "ngay_sinh")
+    private LocalDate ngaySinh;
+
+    @Column(name = "quoc_tich")
+    private String quocTich;
+
+    @Column(name = "gioi_tinh")
+    private String gioiTinh;
+
+    @Column(name = "dia_chi", length = 500)
+    private String diaChi;
+
+    @Column(name = "so_ho_chieu")
+    private String soHoChieu;
+
+    @Column(name = "ho_chieu_ten")
+    private String hoChieuTen; // First name on passport
+
+    @Column(name = "ho_chieu_ho")
+    private String hoChieuHo; // Last name on passport
+
+    @Column(name = "ho_chieu_quoc_gia")
+    private String hoChieuQuocGia; // Issuing country
+
+    @Column(name = "ho_chieu_ngay_het_han")
+    private LocalDate hoChieuNgayHetHan; // Expiry date
+
+    @Column(name = "avatar_url", length = 1000)
+    private String avatarUrl;
 
     @Column(name = "chuc_vu")
     private String chucVu; // Admin, HotelManager, User
