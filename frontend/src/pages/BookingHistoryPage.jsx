@@ -38,7 +38,7 @@ const STATUS_BADGE = {
 };
 
 /* ── Booking Detail Modal ─────────────────────────────────── */
-const BookingDetailModal = ({ bookingId, onClose }) => {
+const BookingDetailModal = ({ bookingId, onClose, onCancelSuccess }) => {
   const [detail, setDetail] = useState(null);
   const [invoice, setInvoice] = useState(null);
   const [payments, setPayments] = useState([]);
@@ -70,6 +70,7 @@ const BookingDetailModal = ({ bookingId, onClose }) => {
       const res = await axiosClient.get(`/bookings/id/${bookingId}`);
       setDetail(res.data);
       setShowConfirmCancel(false);
+      onCancelSuccess?.(res.data);
     } catch { /* ignore */ }
     finally { setCancelling(false); }
   };
@@ -420,6 +421,15 @@ const BookingHistoryPage = () => {
 
   useEffect(() => {
     if (!userId) { navigate('/login'); return; }
+    // Đọc kết quả thanh toán từ query (nếu có)
+    const params = new URLSearchParams(window.location.search);
+    const paymentResult = params.get('paymentResult');
+    if (paymentResult === 'success') {
+      showToast('Thanh toán VNPAY thành công!', 'success');
+    } else if (paymentResult === 'fail') {
+      showToast('Thanh toán VNPAY thất bại hoặc bị hủy.', 'error');
+    }
+
     const load = async () => {
       try {
         const res = await axiosClient.get(`/bookings/user/${userId}`);
@@ -455,7 +465,13 @@ const BookingHistoryPage = () => {
       )}
 
       {selectedBookingId && (
-        <BookingDetailModal bookingId={selectedBookingId} onClose={() => setSelectedBookingId(null)} />
+        <BookingDetailModal
+          bookingId={selectedBookingId}
+          onClose={() => setSelectedBookingId(null)}
+          onCancelSuccess={(updated) => {
+            setBookings(prev => prev.map(b => b.id === updated?.id ? { ...b, ...updated } : b));
+          }}
+        />
       )}
 
       {selectedReviewBooking && (
@@ -537,8 +553,8 @@ const BookingCard = ({ b, onDetail, muted }) => {
       <div className="flex items-start gap-4">
         {/* Hotel thumb */}
         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-100 flex-shrink-0 flex items-center justify-center text-2xl">
-          {b.phong?.khachSan?.hinhAnhBia
-            ? <img src={b.phong.khachSan.hinhAnhBia} alt="" className="w-full h-full object-cover" />
+          {(b.hinhAnhBia || b.phong?.khachSan?.hinhAnhBia)
+            ? <img src={b.hinhAnhBia || b.phong?.khachSan?.hinhAnhBia} alt="" className="w-full h-full object-cover" />
             : '🏨'}
         </div>
 
@@ -546,7 +562,7 @@ const BookingCard = ({ b, onDetail, muted }) => {
           <div className="flex items-start justify-between gap-2 mb-1">
             <div>
               <p className="font-bold text-gray-800 text-sm truncate">
-                {b.phong?.khachSan?.ten || b.tenKhachSan || 'Khách sạn'}
+                {b.tenKhachSan || b.phong?.khachSan?.ten || 'Khách sạn'}
               </p>
               <p className="text-xs text-gray-500">
                 Phòng: {b.phong?.ten || b.tenPhong || '—'}

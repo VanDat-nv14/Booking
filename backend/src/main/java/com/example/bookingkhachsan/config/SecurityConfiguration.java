@@ -35,6 +35,8 @@ public class SecurityConfiguration {
                 .requestMatchers("/", "/api/auth/**", "/api/locations/**",
                         "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error",
                         "/uploads/**").permitAll()
+                // OAuth2 endpoints (Spring Security)
+                .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/hotels/**", "/api/room-types/**").permitAll()
 
 
@@ -54,7 +56,8 @@ public class SecurityConfiguration {
                 // --- Moi request con lai phai dang nhap ---
                 .anyRequest().authenticated()
             )
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            // OAuth2 login requires session for state; keep JWT stateless for APIs.
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authenticationProvider(authenticationProvider)
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .oauth2Login(oauth2 -> oauth2

@@ -4,20 +4,28 @@ import axiosClient from '../api/axiosClient';
 
 const fmt = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n || 0);
 
+const BACKEND = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080';
+
 // ── Hotel Card ───────────────────────────────────────────────────────────
 const HotelCard = ({ hotel }) => {
   const stars = hotel.soSao || 0;
   const avg = hotel.diemDanhGiaTrungBinh ? Number(hotel.diemDanhGiaTrungBinh).toFixed(1) : null;
-  const cover = hotel.hinhAnhBia || hotel.viTri?.hinhAnh || null;
+  const rawCover = hotel.hinhAnhBia || hotel.viTri?.hinhAnh || null;
+  const cover = rawCover && !rawCover.startsWith('http') ? BACKEND + rawCover : rawCover;
 
   return (
     <Link to={`/hotels/${hotel.id}`} target="_blank" rel="noopener noreferrer" className="group bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col">
       {/* Image */}
       <div className="w-full h-52 overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-200 relative flex-shrink-0">
-        {cover
-          ? <img src={cover} alt={hotel.ten} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-          : <div className="w-full h-full flex items-center justify-center text-6xl opacity-40">🏨</div>
-        }
+        {cover ? (
+          <img
+            src={cover}
+            alt={hotel.ten}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.remove('hidden'); }}
+          />
+        ) : null}
+        <div className={`w-full h-full flex items-center justify-center text-6xl opacity-40 ${cover ? 'hidden' : ''}`}>🏨</div>
         {/* Star badge */}
         <div className="absolute top-3 left-3 bg-white/90 backdrop-blur text-amber-500 text-xs font-bold px-2 py-1 rounded-lg shadow flex items-center gap-0.5">
           {'★'.repeat(stars)}{'☆'.repeat(5 - stars)}
@@ -60,6 +68,7 @@ const HotelCard = ({ hotel }) => {
 // ── HomePage ─────────────────────────────────────────────────────────────
 const HomePage = () => {
   const [flatLocations, setFlatLocations] = useState([]);
+  const [loadingLocations, setLoadingLocations] = useState(true);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [checkIn, setCheckIn]   = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -71,7 +80,7 @@ const HomePage = () => {
   const [searchedHotels, setSearchedHotels] = useState(null); // null = show all
   const [searching, setSearching]     = useState(false);
 
-  // Load locations tree
+  // Load locations tree (single request, cached by browser)
   useEffect(() => {
     axiosClient.get('/locations/tree').then(res => {
       const flat = [];
@@ -83,12 +92,12 @@ const HomePage = () => {
         });
       });
       setFlatLocations(flat);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setLoadingLocations(false));
   }, []);
 
-  // Load all hotels on first render
+  // Load only first 12 hotels for fast initial paint
   useEffect(() => {
-    axiosClient.get('/hotels').then(res => {
+    axiosClient.get('/hotels', { params: { limit: 12 } }).then(res => {
       setHotels(res.data || []);
     }).catch(() => {}).finally(() => setLoadingHotels(false));
   }, []);
@@ -112,6 +121,8 @@ const HomePage = () => {
           src="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80"
           alt="Luxury Hotel Pool"
           className="absolute inset-0 w-full h-full object-cover"
+          loading="lazy"
+          decoding="async"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-transparent" />
         <div className="relative container mx-auto px-4 h-full flex flex-col justify-center items-center text-center text-white">
@@ -131,8 +142,9 @@ const HomePage = () => {
                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition text-sm"
                 value={selectedLocation}
                 onChange={e => setSelectedLocation(e.target.value)}
+                disabled={loadingLocations}
               >
-                <option value="">Bạn muốn đi đâu?</option>
+                <option value="">{loadingLocations ? 'Đang tải...' : 'Bạn muốn đi đâu?'}</option>
                 {flatLocations.map(loc => (
                   <option key={loc.id} value={loc.id}>{loc.name}</option>
                 ))}

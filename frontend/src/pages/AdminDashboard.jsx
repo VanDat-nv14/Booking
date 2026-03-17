@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -321,7 +321,16 @@ const Toast = ({ msg, type }) => {
 
 // ── Main AdminDashboard ──────────────────────────
 const AdminDashboard = () => {
+  const [hotels, setHotels] = useState([]);
   const [users, setUsers] = useState([]);
+  const [bookings, setBookings] = useState([]); // All bookings
+
+  // ── REVENUE REPORT STATE ──
+  const [revenueData, setRevenueData] = useState(null);
+  const [revenueFilter, setRevenueFilter] = useState('');
+  const [loadingRevenue, setLoadingRevenue] = useState(false);
+
+  // ── FILTER & SEARCH ──
   const [loading, setLoading] = useState(true);
   const { token, logout, user: currentUser } = useAuth();
   const navigate = useNavigate();
@@ -334,7 +343,6 @@ const AdminDashboard = () => {
   const [toast, setToast] = useState(null);
 
   // Hotels state
-  const [hotels, setHotels] = useState([]);
   const [showHotelModal, setShowHotelModal] = useState(false);
   const [editingHotel, setEditingHotel] = useState(null);
   const HOTEL_FORM_DEFAULT = {
@@ -342,6 +350,7 @@ const AdminDashboard = () => {
     quocGiaId: '', tinhThanhId: '', viTriId: '', viTriName: '',
     gioNhanPhong: '14:00', gioTraPhong: '12:00',
     hinhAnhBia: '', hinhAnhs: [],
+    viDo: null, kinhDo: null, // Tọa độ hiển thị trên bản đồ
     managerEmail: '', managerPassword: '', managerName: '', managerConfirmPassword: ''
   };
   const [hotelFormData, setHotelFormData] = useState(HOTEL_FORM_DEFAULT);
@@ -351,6 +360,8 @@ const AdminDashboard = () => {
   const [viTrisInProvince, setViTrisInProvince] = useState([]);
   const [viTriMode, setViTriMode]       = useState('select'); // 'select' | 'create'
   const [showMapPicker, setShowMapPicker] = useState(false);
+  // Luôn hiển thị bản đồ để gắn tọa độ khách sạn
+  const [showMapPickerForCoords, setShowMapPickerForCoords] = useState(true);
   const [mapSearchQuery, setMapSearchQuery] = useState('');
 
   // Hotel Manager Account Form State
@@ -359,7 +370,6 @@ const AdminDashboard = () => {
   const [managerPwError, setManagerPwError] = useState('');
 
   // Bookings state
-  const [bookings, setBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [searchBooking, setSearchBooking] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -493,10 +503,23 @@ const AdminDashboard = () => {
     fetchViTrisForProvince(tinhThanhId);
   };
 
+  const fetchRevenueReport = useCallback(async () => {
+    setLoadingRevenue(true);
+    try {
+      const res = await axiosClient.get('/admin/reports/revenue');
+      setRevenueData(res.data);
+    } catch (err) {
+      showToast('Lỗi khi tải báo cáo doanh thu', 'error');
+    } finally {
+      setLoadingRevenue(false);
+    }
+  }, [showToast]);
+
   useEffect(() => { 
     const silent = (activeTab === 'hotels' && hotels.length > 0)
                 || (activeTab === 'bookings' && bookings.length > 0)
-                || (activeTab === 'users' && users.length > 0);
+                || (activeTab === 'users' && users.length > 0)
+                || (activeTab === 'reports' && revenueData !== null);
     if (activeTab === 'hotels') {
       fetchHotels();
       if (quocGias.length === 0) fetchQuocGias();
@@ -504,8 +527,10 @@ const AdminDashboard = () => {
       fetchBookings(silent);
     } else if (activeTab === 'users') {
       fetchUsers(silent);
+    } else if (activeTab === 'reports') {
+      fetchRevenueReport();
     }
-  }, [activeTab, fetchBookings, fetchUsers]);
+  }, [activeTab, fetchBookings, fetchUsers, fetchRevenueReport]);
 
   // ── User Actions ──────────────────────────────
   const handleSaveUser = (savedUser, isEdit) => {
@@ -576,6 +601,7 @@ const AdminDashboard = () => {
     const qgId  = hotel.viTri?.tinhThanh?.quocGia?.id || '';
     setViTriMode('select');
     setShowMapPicker(false);
+    setShowMapPickerForCoords(true);
     // Load cascading data
     if (qgId) fetchTinhThanhsForCountry(qgId);
     if (ttId) fetchViTrisForProvince(ttId);
@@ -592,8 +618,8 @@ const AdminDashboard = () => {
       gioTraPhong: hotel.gioTraPhong || '12:00',
       hinhAnhBia: hotel.hinhAnhBia || '',
       hinhAnhs: hotel.hinhAnhs || [],
-      viDo: hotel.viDo || 0,
-      kinhDo: hotel.kinhDo || 0,
+      viDo: hotel.viDo ?? null,
+      kinhDo: hotel.kinhDo ?? null,
       managerEmail: '',
       managerPassword: '',
       managerName: '',
@@ -627,6 +653,9 @@ const AdminDashboard = () => {
       }
 
       const { managerConfirmPassword, ...payload } = hotelFormData;
+      // Đảm bảo viDo/kinhDo hợp lệ để hiển thị marker trên bản đồ
+      payload.viDo = (typeof payload.viDo === 'number' && !isNaN(payload.viDo)) ? payload.viDo : null;
+      payload.kinhDo = (typeof payload.kinhDo === 'number' && !isNaN(payload.kinhDo)) ? payload.kinhDo : null;
       // Xử lý vị trí: viTriId có sẵn hoặc viTriName mới
       if (payload.viTriId) {
         payload.viTriId = Number(payload.viTriId);
@@ -927,6 +956,7 @@ const AdminDashboard = () => {
                     setHotelFormData(HOTEL_FORM_DEFAULT);
                     setViTriMode('select');
                     setViTrisInProvince([]);
+                    setShowMapPickerForCoords(true);
                     setManagerPwError('');
                     setShowHotelModal(true);
                   }}
@@ -964,11 +994,94 @@ const AdminDashboard = () => {
           )}
 
           {/* ── PLACEHOLDER TABS ── */}
-          {['bookings', 'reports'].includes(activeTab) && (
+          {['bookings'].includes(activeTab) && (
             <div className="bg-white rounded-xl shadow-sm p-16 text-center">
               <p className="text-4xl mb-4">🚧</p>
               <h3 className="text-xl font-bold text-gray-700 mb-2">Đang Phát Triển</h3>
               <p className="text-gray-400 text-sm">Module {activeTab} sẽ sớm ra mắt.</p>
+            </div>
+          )}
+
+          {/* ── REVENUE REPORT TAB ── */}
+          {activeTab === 'reports' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-800">Báo Cáo Doanh Thu</h2>
+                <button onClick={fetchRevenueReport} className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+                  🔄 Tải Lại
+                </button>
+              </div>
+
+              {loadingRevenue ? (
+                <div className="py-16 flex justify-center bg-white rounded-xl shadow-sm">
+                  <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : revenueData ? (
+                <div className="space-y-6">
+                  <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
+                    <p className="text-gray-500 text-sm font-medium">Tổng Doanh Thu Toàn Hệ Thống</p>
+                    <p className="text-4xl font-bold mt-2 text-green-600">
+                      {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(revenueData.tongDoanhThuToanHeThong || 0)}
+                    </p>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-sm p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-bold text-gray-800">Doanh Thu Theo Khách Sạn</h3>
+                      <select 
+                        value={revenueFilter} 
+                        onChange={(e) => setRevenueFilter(e.target.value)}
+                        className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+                      >
+                        <option value="">Tất cả khách sạn</option>
+                        {revenueData.doanhThuTheoKhachSan?.map((hs, i) => (
+                          <option key={i} value={hs.tenKhachSan}>{hs.tenKhachSan}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 border-b border-gray-100">
+                            <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase">Khách sạn</th>
+                            <th className="px-5 py-3 text-center text-xs font-bold text-gray-500 uppercase">Số lượng đơn (Hoàn tất)</th>
+                            <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase">Doanh thu</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {revenueData.doanhThuTheoKhachSan
+                            ?.filter(hs => !revenueFilter || hs.tenKhachSan === revenueFilter)
+                            .map((hs, i) => (
+                            <tr key={i} className="hover:bg-blue-50 transition">
+                              <td className="px-5 py-3 font-semibold text-gray-800">
+                                {hs.khachSanId ? (
+                                  <Link to={`/hotels/${hs.khachSanId}`} className="text-blue-600 hover:text-blue-800 hover:underline">
+                                    {hs.tenKhachSan}
+                                  </Link>
+                                ) : (
+                                  hs.tenKhachSan
+                                )}
+                              </td>
+                              <td className="px-5 py-3 text-center text-gray-600 font-medium">{hs.tongSoDon}</td>
+                              <td className="px-5 py-3 text-right text-green-600 font-bold">
+                                {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(hs.tongDoanhThu || 0)}
+                              </td>
+                            </tr>
+                          ))}
+                          {revenueData.doanhThuTheoKhachSan?.length === 0 && (
+                            <tr><td colSpan={3} className="py-8 text-center text-gray-400">Không có dữ liệu doanh thu</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white p-12 text-center rounded-xl shadow-sm text-gray-400">
+                  <p>Không thể tải dữ liệu doanh thu.</p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1160,6 +1273,63 @@ const AdminDashboard = () => {
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* ── VỊ TRÍ TRÊN BẢN ĐỒ (luôn hiển thị - Admin gắn tọa độ để khách sạn hiện marker) ── */}
+                <div className="col-span-2 bg-amber-50 rounded-xl p-4 space-y-3 border border-amber-100">
+                  <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">📍 Vị trí trên bản đồ (hiển thị cho người dùng)</p>
+                  <p className="text-xs text-amber-700">Gắn tọa độ để khách sạn xuất hiện trên bản đồ tại trang /hotels/map. Click trên bản đồ hoặc nhập thủ công.</p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] font-bold text-gray-600">Vĩ độ</label>
+                      <input type="number" step="any" placeholder="VD: 16.0544"
+                        value={hotelFormData.viDo ?? ''} onChange={e => setHotelFormData(f => ({ ...f, viDo: e.target.value === '' ? null : parseFloat(e.target.value) }))}
+                        className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] font-bold text-gray-600">Kinh độ</label>
+                      <input type="number" step="any" placeholder="VD: 108.2022"
+                        value={hotelFormData.kinhDo ?? ''} onChange={e => setHotelFormData(f => ({ ...f, kinhDo: e.target.value === '' ? null : parseFloat(e.target.value) }))}
+                        className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-400" />
+                    </div>
+                    <button type="button"
+                      onClick={() => {
+                        const lat = hotelFormData.viDo ?? 16.0544;
+                        const lng = hotelFormData.kinhDo ?? 108.2022;
+                        setHotelFormData(f => ({ ...f, viDo: lat, kinhDo: lng }));
+                      }}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg transition">
+                      Đặt về mặc định
+                    </button>
+                  </div>
+                  {showMapPickerForCoords && (
+                    <div className="rounded-xl overflow-hidden border border-amber-200 shadow-sm bg-white flex flex-col mt-2">
+                      <div className="h-[280px] w-full relative z-0 bg-gray-100 flex items-center justify-center">
+                        <MapContainer
+                          center={[
+                            (typeof hotelFormData.viDo === 'number' && !isNaN(hotelFormData.viDo)) ? hotelFormData.viDo : 16.0544,
+                            (typeof hotelFormData.kinhDo === 'number' && !isNaN(hotelFormData.kinhDo)) ? hotelFormData.kinhDo : 108.2022
+                          ]}
+                          zoom={13} style={{ height: '100%', width: '100%' }}
+                        >
+                          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
+                          <MapUpdater center={[
+                            (typeof hotelFormData.viDo === 'number' && !isNaN(hotelFormData.viDo)) ? hotelFormData.viDo : 16.0544,
+                            (typeof hotelFormData.kinhDo === 'number' && !isNaN(hotelFormData.kinhDo)) ? hotelFormData.kinhDo : 108.2022
+                          ]} />
+                          <MapClickHandler onLocationSelect={(lat, lng) => setHotelFormData(f => ({ ...f, viDo: lat, kinhDo: lng }))} />
+                          {(typeof hotelFormData.viDo === 'number' && typeof hotelFormData.kinhDo === 'number' && !isNaN(hotelFormData.viDo) && !isNaN(hotelFormData.kinhDo)) && (
+                            <Marker position={[hotelFormData.viDo, hotelFormData.kinhDo]} />
+                          )}
+                        </MapContainer>
+                      </div>
+                      <div className="bg-white p-2 border-t flex justify-between items-center">
+                        <p className="text-[10px] text-gray-500 font-medium">✨ Click trên bản đồ để ghim vị trí khách sạn.</p>
+                        <button type="button" onClick={() => setShowMapPickerForCoords(true)}
+                          className="px-3 py-1 bg-amber-600 text-white text-xs rounded-lg hover:bg-amber-700 font-medium">Đang bật</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Google Maps Preview (địa chỉ) (tắt ở chức năng Map Leaflet) ── */}

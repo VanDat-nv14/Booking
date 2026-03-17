@@ -44,6 +44,7 @@ public class AuthService {
                 .hoTen(user.getHoTen())
                 .userId(user.getId())
                 .email(user.getEmail())
+                .avatarUrl(user.getAvatarUrl())
                 .build();
     }
 
@@ -64,6 +65,7 @@ public class AuthService {
                 .hoTen(user.getHoTen())
                 .userId(user.getId())
                 .email(user.getEmail())
+                .avatarUrl(user.getAvatarUrl())
                 .build();
     }
     private final EmailService emailService;
@@ -100,7 +102,7 @@ public class AuthService {
     }
     
     // Helper to process OAuth2 login
-    public AuthDto.AuthResponse processOAuthPostLogin(String email, String name, String providerInfo) {
+    public AuthDto.AuthResponse processOAuthPostLogin(String email, String name, String providerInfo, String avatarUrl) {
         var userOptional = repository.findByEmail(email);
         NguoiDung user;
         
@@ -110,8 +112,12 @@ public class AuthService {
             if (user.getProvider() == null || user.getProvider() == NguoiDung.Provider.LOCAL) {
                 // If previously local, maybe link? For now, we trust the email.
                 user.setProvider(NguoiDung.Provider.valueOf(providerInfo.toUpperCase()));
-                repository.save(user);
             }
+            // Luôn cập nhật avatar từ Google khi có (để lấy ảnh mới nhất)
+            if (avatarUrl != null && !avatarUrl.isBlank()) {
+                user.setAvatarUrl(avatarUrl);
+            }
+            repository.save(user);
         } else {
             user = new NguoiDung();
             user.setEmail(email);
@@ -121,6 +127,9 @@ public class AuthService {
             user.setChucVu("User");
             user.setTrangThai(true);
             user.setProvider(NguoiDung.Provider.valueOf(providerInfo.toUpperCase()));
+            if (avatarUrl != null && !avatarUrl.isBlank()) {
+                user.setAvatarUrl(avatarUrl);
+            }
             repository.save(user);
         }
         
@@ -132,6 +141,7 @@ public class AuthService {
                 .hoTen(user.getHoTen())
                 .userId(user.getId())
                 .email(user.getEmail())
+                .avatarUrl(user.getAvatarUrl())
                 .build();
     }
 }

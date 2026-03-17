@@ -96,6 +96,18 @@ public class BookingDto {
 
     // ==================== RESPONSE DTOs ====================
 
+    /** Response tạo link thanh toán VNPAY */
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class VnPayCreatePaymentResponse {
+        private Integer bookingId;
+        private BigDecimal amount;
+        private String paymentUrl;
+        private LocalDateTime expiredAt;
+    }
+
     /** Response dat phong day du */
     @Data
     @Builder
@@ -116,6 +128,7 @@ public class BookingDto {
         private String loaiPhong;
         private Integer khachSanId;
         private String tenKhachSan;
+        private String hinhAnhBia;  // Ảnh bìa khách sạn cho card
         private Boolean isReviewed;
 
         // Thong tin nguoi dat

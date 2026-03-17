@@ -89,7 +89,7 @@ const HotelMapPage = () => {
     });
   };
 
-  const SidebarCard = ({ hotel }) => {
+  const SidebarCard = ({ hotel, onView }) => {
     const isSelected = selectedHotelId === hotel.id;
     return (
       <div 
@@ -131,11 +131,23 @@ const HotelMapPage = () => {
               <p className="text-[11px] text-gray-500 mt-1 line-clamp-1">{hotel.soLuotDanhGia || 0} đánh giá</p>
             </div>
             
-            <div className="text-right">
-              <span className="text-[10px] text-gray-400 block mb-0.5">Giá mỗi đêm từ</span>
-              <span className="font-bold text-base text-gray-900 leading-none">
-                 {hotel.giaThapNhat ? fmt(hotel.giaThapNhat) : 'Hết phòng'}
-              </span>
+            <div className="flex items-end justify-between gap-2 mt-1">
+              <div className="text-left">
+                <span className="text-[10px] text-gray-400 block mb-0.5">Giá mỗi đêm từ</span>
+                <span className="font-bold text-base text-gray-900 leading-none">
+                   {hotel.giaThapNhat ? fmt(hotel.giaThapNhat) : 'Hết phòng'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onView) onView(hotel.id);
+                }}
+                className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1 rounded-full whitespace-nowrap"
+              >
+                Xem & đặt
+              </button>
             </div>
           </div>
         </div>
@@ -180,7 +192,13 @@ const HotelMapPage = () => {
                      </div>
                    ))
                 ) : hotels.length > 0 ? (
-                   hotels.map(h => <SidebarCard key={h.id} hotel={h} />)
+                   hotels.map(h => (
+                     <SidebarCard
+                       key={h.id}
+                       hotel={h}
+                       onView={(id) => navigate(`/hotels/${id}`)}
+                     />
+                   ))
                 ) : (
                    <div className="text-center text-gray-400 mt-10 p-5">Không có khách sạn nào được ghi nhận vị trí trên bản đồ.</div>
                 )}

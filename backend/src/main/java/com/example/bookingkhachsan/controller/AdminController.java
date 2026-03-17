@@ -14,8 +14,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.stream.Collectors;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
+import java.math.BigDecimal;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -48,6 +51,21 @@ public class AdminController {
         private Boolean trangThai = true;
     }
 
+    // ── Response DTO cho Báo Cáo Doanh Thu ────────────────
+    @Data
+    public static class RevenueReportItem {
+        private Integer khachSanId;
+        private String tenKhachSan;
+        private Integer tongSoDon;
+        private BigDecimal tongDoanhThu;
+    }
+
+    @Data
+    public static class RevenueReportResponse {
+        private BigDecimal tongDoanhThuToanHeThong;
+        private List<RevenueReportItem> doanhThuTheoKhachSan;
+    }
+
     // ── GET all users ────────────────────────────
     @GetMapping("/users")
     public ResponseEntity<List<NguoiDung>> getAllUsers() {
@@ -58,6 +76,49 @@ public class AdminController {
     @GetMapping("/bookings")
     public ResponseEntity<List<com.example.bookingkhachsan.entity.PhieuDatPhong>> getAllBookings() {
         return ResponseEntity.ok(bookingRepository.findAllByOrderByNgayDatDesc());
+    }
+
+    // ── GET Báo Cáo Doanh Thu ────────────────────
+    @GetMapping("/reports/revenue")
+    public ResponseEntity<RevenueReportResponse> getRevenueReport() {
+        List<com.example.bookingkhachsan.entity.PhieuDatPhong> allBookings = bookingRepository.findAll();
+        
+        BigDecimal globalTotal = BigDecimal.ZERO;
+        Map<String, RevenueReportItem> hotelRevenueMap = new HashMap<>();
+
+        for (com.example.bookingkhachsan.entity.PhieuDatPhong booking : allBookings) {
+            // Chi tinh doanh thu cho cac don da CheckedOut hoac Completed
+            if ("CheckedOut".equals(booking.getTrangThai()) || "Completed".equals(booking.getTrangThai())) {
+                BigDecimal thanhTien = booking.getThanhTien() != null ? booking.getThanhTien() : BigDecimal.ZERO;
+                globalTotal = globalTotal.add(thanhTien);
+
+                String hotelName = "Unknown";
+                Integer hotelId = null;
+                if (booking.getPhong() != null && booking.getPhong().getKhachSan() != null) {
+                    hotelId = booking.getPhong().getKhachSan().getId();
+                    hotelName = booking.getPhong().getKhachSan().getTen();
+                }
+
+                // Use hotelId as the key if available, otherwise hotelName
+                String key = hotelId != null ? hotelId.toString() : hotelName;
+                RevenueReportItem item = hotelRevenueMap.getOrDefault(key, new RevenueReportItem());
+                if (item.getTenKhachSan() == null) {
+                    item.setKhachSanId(hotelId);
+                    item.setTenKhachSan(hotelName);
+                    item.setTongSoDon(0);
+                    item.setTongDoanhThu(BigDecimal.ZERO);
+                }
+                item.setTongSoDon(item.getTongSoDon() + 1);
+                item.setTongDoanhThu(item.getTongDoanhThu().add(thanhTien));
+                hotelRevenueMap.put(key, item);
+            }
+        }
+
+        RevenueReportResponse response = new RevenueReportResponse();
+        response.setTongDoanhThuToanHeThong(globalTotal);
+        response.setDoanhThuTheoKhachSan(hotelRevenueMap.values().stream().collect(Collectors.toList()));
+
+        return ResponseEntity.ok(response);
     }
 
     // ── GET user by id ───────────────────────────

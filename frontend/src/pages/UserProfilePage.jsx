@@ -6,6 +6,23 @@ import { useAuth } from '../context/AuthContext';
 const avatar = (name) =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=4f46e5&color=fff&bold=true&size=128`;
 
+/** Avatar hiển thị ảnh hoặc fallback initials khi load lỗi */
+const AvatarImage = ({ src, fallbackName, className }) => {
+  const [error, setError] = useState(false);
+  const initials = (fallbackName || 'U').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  if (error || !src) {
+    return (
+      <div className={`flex items-center justify-center bg-indigo-500 text-white font-bold ${className}`}>
+        {initials}
+      </div>
+    );
+  }
+  return (
+    <img src={src} alt="Avatar" className={className}
+      onError={() => setError(true)} />
+  );
+};
+
 const roleLabel = { Admin: '🛡️ Quản Trị Viên', HotelManager: '🏨 Quản Lý Khách Sạn', User: '👤 Khách Hàng' };
 const roleColor = { Admin: 'bg-red-100 text-red-700', HotelManager: 'bg-purple-100 text-purple-700', User: 'bg-blue-100 text-blue-700' };
 
@@ -402,10 +419,11 @@ const UserProfilePage = () => {
     } finally { setSaving(false); }
   };
 
-  const BACKEND = 'http://localhost:8080';
-  const displayAvatar = profile.avatarUrl
-    ? (profile.avatarUrl.startsWith('http') ? profile.avatarUrl : BACKEND + profile.avatarUrl)
-    : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.hoTen || 'U')}&background=4f46e5&color=fff&bold=true&size=128`;
+  const BACKEND = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080';
+  const avatarUrl = profile.avatarUrl || authUser?.avatarUrl;
+  const displayAvatar = avatarUrl
+    ? (avatarUrl.startsWith('http') ? avatarUrl : BACKEND + avatarUrl)
+    : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.hoTen || authUser?.hoTen || 'U')}&background=4f46e5&color=fff&bold=true&size=128`;
 
   if (loading) return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center">
@@ -556,9 +574,12 @@ const UserProfilePage = () => {
 
           {/* Avatar with camera button */}
           <div className="relative flex-shrink-0 ml-4">
-            <img src={displayAvatar} alt="Avatar"
-              className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg" />
-            <button onClick={() => { setAvatarInput(profile.avatarUrl || ''); setShowAvatarModal(true); }}
+            <AvatarImage
+              src={displayAvatar}
+              fallbackName={profile.hoTen || authUser?.hoTen || 'U'}
+              className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg"
+            />
+            <button onClick={() => { setAvatarInput(profile.avatarUrl || authUser?.avatarUrl || ''); setShowAvatarModal(true); }}
               className="absolute bottom-0 right-0 w-7 h-7 bg-gray-700 rounded-full flex items-center justify-center shadow-md hover:bg-gray-800 transition border-2 border-white"
               title="Thay đổi ảnh đại diện">
               <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -17,6 +17,15 @@ public interface PhieuDatPhongRepository extends JpaRepository<PhieuDatPhong, In
 
     List<PhieuDatPhong> findByNguoiDungId(Integer nguoiDungId);
 
+    /** Load bookings with phong, loaiPhong, khachSan, nguoiDung in one query (avoid N+1). */
+    @Query("SELECT DISTINCT p FROM PhieuDatPhong p " +
+           "LEFT JOIN FETCH p.phong ph " +
+           "LEFT JOIN FETCH ph.loaiPhong " +
+           "LEFT JOIN FETCH ph.khachSan " +
+           "LEFT JOIN FETCH p.nguoiDung " +
+           "WHERE p.nguoiDung.id = :userId")
+    List<PhieuDatPhong> findByNguoiDungIdWithDetails(@Param("userId") Integer userId);
+
     List<PhieuDatPhong> findByPhong_KhachSan_IdOrderByNgayDatDesc(Integer khachSanId);
 
     List<PhieuDatPhong> findByTrangThaiOrderByNgayDatDesc(String trangThai);

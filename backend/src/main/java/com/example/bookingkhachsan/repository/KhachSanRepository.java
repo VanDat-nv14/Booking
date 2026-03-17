@@ -8,13 +8,13 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface KhachSanRepository extends JpaRepository<KhachSan, Integer> {
-    
+
     Optional<KhachSan> findByNguoiQuanLy_Id(Integer managerId);
     
     // Simple search by location and stars
@@ -39,4 +39,8 @@ public interface KhachSanRepository extends JpaRepository<KhachSan, Integer> {
                                        @Param("maxPrice") BigDecimal maxPrice,
                                        @Param("checkIn") LocalDate checkIn,
                                        @Param("checkOut") LocalDate checkOut);
+
+    /** Load hotels with phongs in one query for map data (avoid N+1). */
+    @Query("SELECT DISTINCT k FROM KhachSan k LEFT JOIN FETCH k.phongs WHERE k.viDo IS NOT NULL AND k.kinhDo IS NOT NULL")
+    List<KhachSan> findAllWithPhongsForMap();
 }

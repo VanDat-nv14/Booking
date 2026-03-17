@@ -23,8 +23,8 @@ public class HotelController {
     private final HotelService service;
 
     @GetMapping
-    public ResponseEntity<List<KhachSan>> getAll() {
-        return ResponseEntity.ok(service.getAll());
+    public ResponseEntity<List<KhachSan>> getAll(@RequestParam(required = false) Integer limit) {
+        return ResponseEntity.ok(service.getAll(limit));
     }
 
     @GetMapping("/my-hotel")
