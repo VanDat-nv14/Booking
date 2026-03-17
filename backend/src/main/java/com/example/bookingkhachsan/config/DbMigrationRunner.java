@@ -39,6 +39,8 @@ public class DbMigrationRunner {
             addColumnIfNotExists("khach_san",       "ti_le_coc",          "DECIMAL(5,2) DEFAULT 30.00");
             addColumnIfNotExists("khach_san",       "mo_ta",              "NVARCHAR(MAX)");
             addColumnIfNotExists("khach_san",       "hinh_anh_bia",       "NVARCHAR(MAX)");
+            addColumnIfNotExists("khach_san",       "vi_do",             "FLOAT NULL");
+            addColumnIfNotExists("khach_san",       "kinh_do",           "FLOAT NULL");
             addColumnIfNotExists("phong",           "tang",               "INT");
             addColumnIfNotExists("phong",           "so_phong",           "NVARCHAR(20)");
             addColumnIfNotExists("phong",           "mo_ta",              "NVARCHAR(MAX)");

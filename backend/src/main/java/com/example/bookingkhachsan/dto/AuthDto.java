@@ -59,6 +59,7 @@ public class AuthDto {
         private String hoTen;
         private Integer userId;
         private String email;
+        private String avatarUrl;
     }
     @Data
     @Builder

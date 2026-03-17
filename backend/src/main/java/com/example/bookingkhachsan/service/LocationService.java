@@ -14,11 +14,6 @@ public class LocationService {
     private QuocGiaRepository quocGiaRepository;
 
     public List<QuocGia> getTree() {
-        // Because of JPA mappings, fetching QuocGia will lazily fetch inner lists when accessed or serialized if not cautious.
-        // However, we need to be careful with LazyInitializationException if outside transaction.
-        // But Controller will serialize it. 
-        // Best to use DTOs or OpenEntityManagerInView (default true in Boot). 
-        // Let's rely on default fetch for now.
-        return quocGiaRepository.findByTrangThaiTrue();
+        return quocGiaRepository.findTreeWithLocations();
     }
 }

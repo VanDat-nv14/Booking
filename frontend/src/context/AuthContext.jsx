@@ -9,37 +9,38 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const init = async () => {
-            if (token) {
-                const storedRole = localStorage.getItem('role');
-                const storedName = localStorage.getItem('hoTen');
-                const storedUserId = localStorage.getItem('userId');
-                const storedEmail = localStorage.getItem('email');
-                const storedAvatar = localStorage.getItem('avatarUrl');
-                if (storedRole && storedName) {
-                    // Set immediately from localStorage (no loading flash)
-                    setUser({
-                        role: storedRole,
-                        hoTen: storedName,
-                        userId: storedUserId,
-                        email: storedEmail,
-                        avatarUrl: storedAvatar || null,
-                    });
-                    // Then fetch fresh avatarUrl from API in background
-                    if (storedUserId) {
-                        try {
-                            const res = await axiosClient.get(`/user/${storedUserId}`);
-                            const freshAvatar = res.data.avatarUrl || null;
-                            if (freshAvatar) localStorage.setItem('avatarUrl', freshAvatar);
-                            else localStorage.removeItem('avatarUrl');
-                            setUser(prev => prev ? { ...prev, avatarUrl: freshAvatar } : prev);
-                        } catch (_) { /* silent */ }
-                    }
-                }
-            }
+        if (!token) {
             setLoading(false);
-        };
-        init();
+            return;
+        }
+        const storedRole = localStorage.getItem('role');
+        const storedName = localStorage.getItem('hoTen');
+        const storedUserId = localStorage.getItem('userId');
+        const storedEmail = localStorage.getItem('email');
+        const storedAvatar = localStorage.getItem('avatarUrl');
+        if (storedRole && storedName) {
+            setUser({
+                role: storedRole,
+                hoTen: storedName,
+                userId: storedUserId,
+                email: storedEmail,
+                avatarUrl: storedAvatar || null,
+            });
+        }
+        setLoading(false);
+        // Fetch fresh avatar in background (non-blocking)
+        // Chỉ cập nhật khi có giá trị mới; KHÔNG xóa avatarUrl khi backend trả rỗng (giữ avatar từ OAuth callback)
+        if (storedUserId) {
+            axiosClient.get(`/user/${storedUserId}`)
+                .then(res => {
+                    const freshAvatar = (res.data?.avatarUrl && res.data.avatarUrl.trim()) ? res.data.avatarUrl.trim() : null;
+                    if (freshAvatar) {
+                        localStorage.setItem('avatarUrl', freshAvatar);
+                        setUser(prev => prev ? { ...prev, avatarUrl: freshAvatar } : prev);
+                    }
+                })
+                .catch(() => {});
+        }
     }, [token]);
 
     // Dang nhap: luu token va thong tin user vao state va localStorage
@@ -82,7 +83,7 @@ export const AuthProvider = ({ children }) => {
 
     return (
         <AuthContext.Provider value={{ user, token, login, logout, loading, hasRole, updateAvatar }}>
-            {!loading && children}
+            {children}
         </AuthContext.Provider>
     );
 };

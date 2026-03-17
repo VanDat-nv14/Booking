@@ -343,6 +343,12 @@ const HotelDetailPage = () => {
         soNguoiLon: guests,
         ghiChuKhach: guestNote || null,
       });
+      // Nếu thanh toán online (VNPAY / MoMo) → chuyển sang bước thanh toán, chưa hiển thị màn hoàn tất
+      if (payMethod === 'VNPAY' || payMethod === 'MoMo') {
+        navigate(`/booking?bookingId=${res.data.id}&method=${payMethod}`);
+        return;
+      }
+      // Các phương thức khác: hiển thị màn hình đặt phòng thành công như hiện tại
       setBookingResult(res.data);
     } catch (err) {
       showToast(err.response?.data?.message || err.response?.data?.error || 'Đặt phòng thất bại!', 'error');
@@ -407,8 +413,9 @@ const HotelDetailPage = () => {
   );
 
   // ── Computed ─────────────────────────────────────────────────────────
+  const BACKEND = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080';
+  const toFullUrl = (url) => url && (url.startsWith('http') ? url : BACKEND + url);
   const avgScore = hotel.diemDanhGiaTrungBinh ? Number(hotel.diemDanhGiaTrungBinh) : 0;
-  const allImages = [hotel.hinhAnhBia, ...(hotel.hinhAnhs || []).filter(img => img && img !== hotel.hinhAnhBia)].filter(Boolean);
 
   // ── Main Render ──────────────────────────────────────────────────────
   return (
@@ -416,7 +423,7 @@ const HotelDetailPage = () => {
 
       {/* ── Hero: Image Gallery ── */}
       <div className="relative">
-        <ImageGallery cover={hotel.hinhAnhBia} images={hotel.hinhAnhs || []} />
+        <ImageGallery cover={toFullUrl(hotel.hinhAnhBia)} images={(hotel.hinhAnhs || []).map(toFullUrl)} />
 
         {/* Back button overlay */}
         <button onClick={() => navigate(-1)}

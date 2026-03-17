@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -592,8 +593,10 @@ public class BookingService {
 
     @Transactional(readOnly = true)
     public List<BookingDto.BookingResponse> getBookingsByUser(Integer userId) {
-        return bookingRepo.findByNguoiDungId(userId)
-                .stream().map(this::toBookingResponse).collect(Collectors.toList());
+        List<PhieuDatPhong> list = bookingRepo.findByNguoiDungIdWithDetails(userId);
+        List<Integer> ids = list.stream().map(PhieuDatPhong::getId).collect(Collectors.toList());
+        Set<Integer> reviewedIds = ids.isEmpty() ? Set.of() : danhGiaRepo.findPhieuDatPhongIdsWithReview(ids);
+        return list.stream().map(b -> toBookingResponse(b, reviewedIds)).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
@@ -734,15 +737,60 @@ public class BookingService {
         lichSuRepo.save(ls);
     }
 
+    /**
+     * Gateway (VNPAY, MoMo, ...) báo thanh toán thành công cho một booking.
+     * Không thay đổi trạng thái booking (Pending/Confirmed ...) ngoài trường trangThaiThanhToan.
+     */
+    @Transactional
+    public BookingDto.BookingResponse updatePaymentStatusFromGateway(
+            Integer bookingId,
+            BigDecimal soTien,
+            String phuongThuc,
+            String maGiaoDich
+    ) {
+        PhieuDatPhong booking = findBookingById(bookingId);
+
+        if ("DaThanhToan".equalsIgnoreCase(booking.getTrangThaiThanhToan())) {
+            // Đã được ghi nhận thanh toán trước đó, không ghi trùng
+            log.info("Booking {} already marked as paid, skip duplicate gateway callback.", booking.getMaDatPhong());
+            return toBookingResponse(booking);
+        }
+
+        BigDecimal money = soTien != null ? soTien : (booking.getThanhTien() != null ? booking.getThanhTien() : BigDecimal.ZERO);
+
+        // Ghi lịch sử thanh toán từ gateway
+        LichSuThanhToan ls = new LichSuThanhToan();
+        ls.setPhieuDatPhong(booking);
+        ls.setSoTien(money);
+        ls.setLoaiGiaoDich("ThanhToan");
+        ls.setPhuongThuc(phuongThuc != null ? phuongThuc : "HeThong");
+        ls.setTrangThai("ThanhCong");
+        ls.setMaGiaoDich(maGiaoDich);
+        ls.setGhiChu("Thanh toán qua cổng " + (phuongThuc != null ? phuongThuc : "Gateway"));
+        ls.setNguoiThucHien("PaymentGateway");
+        lichSuRepo.save(ls);
+
+        booking.setTrangThaiThanhToan("DaThanhToan");
+        bookingRepo.save(booking);
+
+        return toBookingResponse(booking);
+    }
+
     private String getCurrentUserEmail() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return auth != null ? auth.getName() : "System";
     }
 
     private BookingDto.BookingResponse toBookingResponse(PhieuDatPhong b) {
+        return toBookingResponse(b, null);
+    }
+
+    private BookingDto.BookingResponse toBookingResponse(PhieuDatPhong b, Set<Integer> reviewedIds) {
         long soNgay = b.getNgayDen() != null && b.getNgayDi() != null
                 ? ChronoUnit.DAYS.between(b.getNgayDen(), b.getNgayDi()) : 0;
         NguoiDung kh = b.getNguoiDung();
+        boolean isReviewed = reviewedIds != null ? reviewedIds.contains(b.getId()) : danhGiaRepo.existsByPhieuDatPhongId(b.getId());
+        KhachSan ks = b.getPhong() != null ? b.getPhong().getKhachSan() : null;
         return BookingDto.BookingResponse.builder()
                 .id(b.getId())
                 .maDatPhong(b.getMaDatPhong())
@@ -755,10 +803,9 @@ public class BookingService {
                 .soPhong(b.getPhong() != null ? b.getPhong().getSoPhong() : null)
                 .loaiPhong(b.getPhong() != null && b.getPhong().getLoaiPhong() != null
                         ? b.getPhong().getLoaiPhong().getTen() : null)
-                .khachSanId(b.getPhong() != null && b.getPhong().getKhachSan() != null
-                        ? b.getPhong().getKhachSan().getId() : null)
-                .tenKhachSan(b.getPhong() != null && b.getPhong().getKhachSan() != null
-                        ? b.getPhong().getKhachSan().getTen() : null)
+                .khachSanId(ks != null ? ks.getId() : null)
+                .tenKhachSan(ks != null ? ks.getTen() : null)
+                .hinhAnhBia(ks != null ? ks.getHinhAnhBia() : null)
                 .nguoiDungId(kh != null ? kh.getId() : null)
                 .hoTenKhach(kh != null ? kh.getHoTen() : null)
                 .emailKhach(kh != null ? kh.getEmail() : null)
@@ -775,7 +822,7 @@ public class BookingService {
                 .pendingExpiresAt(b.getPendingExpiresAt())
                 .ngayDat(b.getNgayDat())
                 .ghiChuKhach(b.getGhiChuKhach())
-                .isReviewed(danhGiaRepo.existsByPhieuDatPhongId(b.getId()))
+                .isReviewed(isReviewed)
                 .build();
     }
     /**

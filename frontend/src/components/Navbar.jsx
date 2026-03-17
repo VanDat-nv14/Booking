@@ -6,6 +6,7 @@ const Navbar = () => {
     const navigate = useNavigate();
     const { user, token, logout } = useAuth();
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [avatarImgError, setAvatarImgError] = useState(false);
     const dropdownRef = useRef(null);
 
     const handleLogout = () => {
@@ -30,11 +31,14 @@ const Navbar = () => {
         return () => document.removeEventListener('mousedown', handler);
     }, []);
 
+    // Reset avatar error khi user/avatarUrl thay đổi (vd: login mới)
+    useEffect(() => { setAvatarImgError(false); }, [user?.avatarUrl]);
+
     const initials = user?.hoTen
         ? user.hoTen.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
         : (user?.email?.[0]?.toUpperCase() || 'U');
 
-    const BACKEND = 'http://localhost:8080';
+    const BACKEND = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080';
     const avatarSrc = user?.avatarUrl
         ? (user.avatarUrl.startsWith('http') ? user.avatarUrl : BACKEND + user.avatarUrl)
         : null;
@@ -42,13 +46,19 @@ const Navbar = () => {
     const menuItems = token ? [
         ...(user?.role === 'Admin' || user?.role === 'ADMIN' ? [
             { icon: '🛡️', label: 'Quản trị hệ thống', to: '/admin/dashboard' },
+            { icon: '👤', label: 'Tài khoản cá nhân', to: '/user/profile' },
         ] : []),
         ...(user?.role === 'HotelManager' || user?.role === 'HOTEL_MANAGER' ? [
             { icon: '🏨', label: 'Quản lý khách sạn', to: '/manager/dashboard' },
+            { icon: '👤', label: 'Tài khoản cá nhân', to: '/user/profile' },
+            { icon: '📋', label: 'Lịch sử đặt phòng', to: '/user/bookings' },
+            { icon: '⭐', label: 'Đánh giá của tôi', to: '/user/profile' },
         ] : []),
-        { icon: '👤', label: 'Tài khoản cá nhân', to: '/user/profile' },
-        { icon: '📋', label: 'Lịch sử đặt phòng', to: '/user/bookings' },
-        { icon: '⭐', label: 'Đánh giá của tôi', to: '/user/profile' },
+        ...(user?.role === 'User' || user?.role === 'USER' ? [
+            { icon: '👤', label: 'Tài khoản cá nhân', to: '/user/profile' },
+            { icon: '📋', label: 'Lịch sử đặt phòng', to: '/user/bookings' },
+            { icon: '⭐', label: 'Đánh giá của tôi', to: '/user/profile' },
+        ] : []),
     ] : [];
 
     return (
@@ -128,9 +138,10 @@ const Navbar = () => {
                                     <div className="px-4 py-3 border-b border-gray-100"
                                          style={{ background: 'linear-gradient(135deg, #003580 0%, #0071c2 100%)' }}>
                                         <div className="flex items-center gap-3">
-                                            {avatarSrc ? (
-                                                <img src={avatarSrc} alt="avatar"
+                                            {(avatarSrc && !avatarImgError) ? (
+                                                <img src={avatarSrc} alt=""
                                                     className="w-10 h-10 rounded-full object-cover shadow ring-2 ring-white/50"
+                                                    onError={() => setAvatarImgError(true)}
                                                 />
                                             ) : (
                                                 <div

@@ -127,7 +127,7 @@ const LoginPage = () => {
 
                         <div className="grid grid-cols-2 gap-4">
                             <a 
-                                href="http://localhost:8080/oauth2/authorization/google"
+                                href={`${import.meta.env.VITE_BACKEND_BASE_URL}/oauth2/authorization/google`}
                                 className="flex items-center justify-center w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                             >
                                 <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
@@ -139,7 +139,7 @@ const LoginPage = () => {
                                 <span className="text-sm font-medium text-gray-700">Google</span>
                             </a>
                             <a 
-                                href="http://localhost:8080/oauth2/authorization/facebook"
+                                href={`${import.meta.env.VITE_BACKEND_BASE_URL}/oauth2/authorization/facebook`}
                                 className="flex items-center justify-center w-full px-4 py-2 bg-[#1877F2] text-white rounded-lg hover:bg-[#166FE5] transition-colors"
                             >
                                 <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 24 24">

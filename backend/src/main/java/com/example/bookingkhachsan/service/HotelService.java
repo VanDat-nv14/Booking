@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.example.bookingkhachsan.entity.NguoiDung;
 import com.example.bookingkhachsan.repository.NguoiDungRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -40,7 +41,10 @@ public class HotelService {
         return khachSanRepository.findAvailableHotels(viTriId, soSao, minPrice, maxPrice, checkIn, checkOut);
     }
 
-    public List<KhachSan> getAll() {
+    public List<KhachSan> getAll(Integer limit) {
+        if (limit != null && limit > 0) {
+            return khachSanRepository.findAll(PageRequest.of(0, Math.min(limit, 100))).getContent();
+        }
         return khachSanRepository.findAll();
     }
 
@@ -140,8 +144,9 @@ public class HotelService {
     }
 
     /** Lấy dữ liệu rút gọn cho Custom Map toàn màn hình */
+    @Transactional(readOnly = true)
     public List<com.example.bookingkhachsan.dto.HotelMapDto> getMapData() {
-        return khachSanRepository.findAll().stream()
+        return khachSanRepository.findAllWithPhongsForMap().stream()
                 .filter(hotel -> hotel.getViDo() != null && hotel.getKinhDo() != null)
                 .map(hotel -> {
                     com.example.bookingkhachsan.dto.HotelMapDto dto = new com.example.bookingkhachsan.dto.HotelMapDto();
@@ -180,7 +185,7 @@ public class HotelService {
     }
 
     /**
-     * HotelManager cập nhật chỉ các trường an toàn: tiền cọ, giờ nhận/trả phòng.
+     * HotelManager cập nhật: tiền cọ, giờ nhận/trả phòng, hình ảnh (hinhAnhBia, hinhAnhs).
      */
     @Transactional
     public KhachSan updateHotelSettings(Integer id, com.example.bookingkhachsan.dto.HotelDto dto) {
@@ -193,6 +198,12 @@ public class HotelService {
         }
         if (dto.getGioTraPhong() != null) {
             hotel.setGioTraPhong(dto.getGioTraPhong());
+        }
+        if (dto.getHinhAnhBia() != null) {
+            hotel.setHinhAnhBia(dto.getHinhAnhBia());
+        }
+        if (dto.getHinhAnhs() != null) {
+            hotel.setHinhAnhs(dto.getHinhAnhs());
         }
         return khachSanRepository.save(hotel);
     }

@@ -451,9 +451,9 @@ const ManagerDashboard = () => {
                 {/* User avatar */}
                 {sidebarOpen && (
                     <div className="flex items-center gap-3 p-4 bg-emerald-700/40">
-                        {user?.avatarUrl ? (
+                            {user?.avatarUrl ? (
                             <img
-                                src={user.avatarUrl.startsWith('http') ? user.avatarUrl : 'http://localhost:8080' + user.avatarUrl}
+                                src={user.avatarUrl.startsWith('http') ? user.avatarUrl : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + user.avatarUrl}
                                 alt="avatar"
                                 className="w-10 h-10 rounded-full object-cover flex-shrink-0 ring-2 ring-emerald-300"
                             />
@@ -932,7 +932,7 @@ const ManagerDashboard = () => {
                                                             ? 'border-blue-500 ring-2 ring-blue-300'
                                                             : 'border-gray-200'
                                                     }`}>
-                                                        <img src={url.startsWith('http') ? url : 'http://localhost:8080' + url} alt={`Hotel ${idx+1}`}
+                                                        <img src={url.startsWith('http') ? url : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + url} alt={`Hotel ${idx+1}`}
                                                             className="w-full h-36 object-cover"
                                                             onError={e => e.target.src='https://placehold.co/400x200/e2e8f0/94a3b8?text=No+Image'} />
                                                         
