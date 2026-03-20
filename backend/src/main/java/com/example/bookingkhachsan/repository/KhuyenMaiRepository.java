@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface KhuyenMaiRepository extends JpaRepository<KhuyenMai, String> {
+    java.util.List<KhuyenMai> findByKhachSan_Id(Integer khachSanId);
 }

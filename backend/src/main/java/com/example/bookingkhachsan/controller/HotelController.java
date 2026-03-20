@@ -109,9 +109,13 @@ public class HotelController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteHotel(@PathVariable Integer id) {
-        service.deleteHotel(id);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<?> deleteHotel(@PathVariable Integer id) {
+        try {
+            service.deleteHotel(id);
+            return ResponseEntity.ok().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
     }
 
     /**

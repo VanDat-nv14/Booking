@@ -48,11 +48,10 @@ public class HotelDto {
     /** Danh sách URL ảnh phụ */
     private List<String> hinhAnhs;
 
-    // Manager info (optional, for creation only)
-    @Email(message = "Email không hợp lệ")
+    // Manager info (optional, for creation only). Cho phép null/empty; validate format trong service khi có giá trị
     private String managerEmail;
     
-    @Size(min = 8, message = "Mật khẩu quản lý phải có ít nhất 8 ký tự")
+    /** Chỉ bắt buộc khi tạo quản lý mới; để trống khi gán user đã tồn tại */
     private String managerPassword;
     
     private String managerName;

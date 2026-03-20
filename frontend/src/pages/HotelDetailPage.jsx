@@ -63,10 +63,15 @@ const PolicyBadge = ({ choPhepHuy, mienPhiHuyTruocGio, phiHuyPct }) => {
   );
 };
 
+// Placeholder khi ảnh load lỗi
+const IMG_PLACEHOLDER = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150"%3E%3Crect fill="%23e5e7eb" width="200" height="150"/%3E%3Ctext fill="%239ca3af" x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-size="14"%3E🏨 Ảnh không tải được%3C/text%3E%3C/svg%3E';
+
 // ── Image Gallery ────────────────────────────────────────────────────────
 const ImageGallery = ({ cover, images = [] }) => {
   const [lightbox, setLightbox] = useState(null);
+  const [failedUrls, setFailedUrls] = useState(new Set());
   const allImages = [cover, ...images.filter(img => img && img !== cover)].filter(Boolean);
+  const onImgError = (url) => setFailedUrls(prev => new Set(prev).add(url));
 
   if (allImages.length === 0) {
     return (
@@ -90,7 +95,7 @@ const ImageGallery = ({ cover, images = [] }) => {
             {/* Main large image (left, takes 2/3 width on md+) */}
             <div className={`md:col-span-2 relative h-full w-full overflow-hidden cursor-pointer group bg-gray-100 flex justify-center items-center ${allImages.length > 3 ? 'rounded-t-lg md:rounded-t-none md:rounded-tl-xl' : 'rounded-lg md:rounded-none md:rounded-l-xl'}`}
               onClick={() => setLightbox(0)}>
-              <img src={mainImg} alt="Ảnh chính" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              <img src={failedUrls.has(mainImg) ? IMG_PLACEHOLDER : mainImg} alt="Ảnh chính" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={() => onImgError(mainImg)} />
               <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors pointer-events-none" />
             </div>
 
@@ -98,7 +103,7 @@ const ImageGallery = ({ cover, images = [] }) => {
             <div className="hidden md:grid grid-rows-2 gap-2 h-full">
               {allImages[1] ? (
                 <div className={`relative h-full w-full overflow-hidden cursor-pointer group bg-gray-100 ${allImages.length > 3 ? 'rounded-tr-xl' : 'rounded-tr-xl'}`} onClick={() => setLightbox(1)}>
-                  <img src={allImages[1]} alt="Ảnh 2" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img src={failedUrls.has(allImages[1]) ? IMG_PLACEHOLDER : allImages[1]} alt="Ảnh 2" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={() => onImgError(allImages[1])} />
                   <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors pointer-events-none" />
                 </div>
               ) : (
@@ -106,7 +111,7 @@ const ImageGallery = ({ cover, images = [] }) => {
               )}
               {allImages[2] ? (
                  <div className={`relative h-full w-full overflow-hidden cursor-pointer group bg-gray-100 ${allImages.length > 3 ? '' : 'rounded-br-xl'}`} onClick={() => setLightbox(2)}>
-                   <img src={allImages[2]} alt="Ảnh 3" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                   <img src={failedUrls.has(allImages[2]) ? IMG_PLACEHOLDER : allImages[2]} alt="Ảnh 3" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={() => onImgError(allImages[2])} />
                    <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors pointer-events-none" />
                  </div>
               ) : (
@@ -137,7 +142,7 @@ const ImageGallery = ({ cover, images = [] }) => {
                return (
                  <div key={actualIdx} className={`relative overflow-hidden cursor-pointer group bg-gray-100 ${idx === 0 ? 'rounded-bl-xl' : ''} ${idx === 4 || actualIdx === allImages.length - 1 ? 'rounded-br-xl' : ''}`}
                    onClick={() => setLightbox(actualIdx)}>
-                   <img src={img} alt={`Ảnh ${actualIdx + 1}`} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                   <img src={failedUrls.has(img) ? IMG_PLACEHOLDER : img} alt={`Ảnh ${actualIdx + 1}`} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={() => onImgError(img)} />
                    <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors pointer-events-none" />
                    
                    {isLastVisible && remainingCount > 0 && (
@@ -157,7 +162,7 @@ const ImageGallery = ({ cover, images = [] }) => {
         <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center" onClick={() => setLightbox(null)}>
           <button className="absolute top-4 right-6 text-white text-4xl font-light hover:text-gray-300">×</button>
           <button className="absolute left-4 text-white text-5xl font-light hover:text-gray-300 px-3" onClick={e => { e.stopPropagation(); setLightbox((lightbox - 1 + allImages.length) % allImages.length); }}>‹</button>
-          <img src={allImages[lightbox]} alt="lightbox" className="max-h-[85vh] max-w-[85vw] object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+          <img src={failedUrls.has(allImages[lightbox]) ? IMG_PLACEHOLDER : allImages[lightbox]} alt="lightbox" className="max-h-[85vh] max-w-[85vw] object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} onError={() => onImgError(allImages[lightbox])} />
           <button className="absolute right-4 text-white text-5xl font-light hover:text-gray-300 px-3" onClick={e => { e.stopPropagation(); setLightbox((lightbox + 1) % allImages.length); }}>›</button>
           <div className="absolute bottom-4 text-white/70 text-sm">{lightbox + 1} / {allImages.length}</div>
         </div>
@@ -413,8 +418,12 @@ const HotelDetailPage = () => {
   );
 
   // ── Computed ─────────────────────────────────────────────────────────
-  const BACKEND = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080';
-  const toFullUrl = (url) => url && (url.startsWith('http') ? url : BACKEND + url);
+  const toFullUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http') || url.startsWith('data:')) return url;
+    const base = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080';
+    return base + (url.startsWith('/') ? url : '/' + url);
+  };
   const avgScore = hotel.diemDanhGiaTrungBinh ? Number(hotel.diemDanhGiaTrungBinh) : 0;
 
   // ── Main Render ──────────────────────────────────────────────────────

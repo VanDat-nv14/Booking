@@ -932,7 +932,7 @@ const ManagerDashboard = () => {
                                                             ? 'border-blue-500 ring-2 ring-blue-300'
                                                             : 'border-gray-200'
                                                     }`}>
-                                                        <img src={url.startsWith('http') ? url : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + url} alt={`Hotel ${idx+1}`}
+                                                        <img src={(url.startsWith('http') || url.startsWith('data:')) ? url : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + url} alt={`Hotel ${idx+1}`}
                                                             className="w-full h-36 object-cover"
                                                             onError={e => e.target.src='https://placehold.co/400x200/e2e8f0/94a3b8?text=No+Image'} />
                                                         

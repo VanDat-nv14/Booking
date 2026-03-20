@@ -107,7 +107,7 @@ const HotelMapPage = () => {
           {/* Img */}
           <div className="w-1/3 flex-shrink-0 bg-gray-100 relative">
              {hotel.hinhAnhBia ? (
-                <img src={hotel.hinhAnhBia} alt={hotel.ten} className="w-full h-full object-cover" />
+                <img src={(hotel.hinhAnhBia.startsWith('http') || hotel.hinhAnhBia.startsWith('data:')) ? hotel.hinhAnhBia : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + hotel.hinhAnhBia} alt={hotel.ten} className="w-full h-full object-cover" />
              ) : (
                 <div className="w-full h-full flex items-center justify-center text-2xl">🏨</div>
              )}
@@ -246,7 +246,7 @@ const HotelMapPage = () => {
                       <Popup closeButton={false} offset={[0, -20]} className="hotel-map-popup">
                          <div className="w-48 overflow-hidden rounded-xl bg-white m-[-14px] cursor-pointer" onClick={() => navigate(`/hotels/${hotel.id}`)}>
                             <div className="h-32 bg-gray-100 relative">
-                               {hotel.hinhAnhBia ? <img src={hotel.hinhAnhBia} className="w-full h-full object-cover" /> : null}
+                               {hotel.hinhAnhBia ? <img src={(hotel.hinhAnhBia.startsWith('http') || hotel.hinhAnhBia.startsWith('data:')) ? hotel.hinhAnhBia : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + hotel.hinhAnhBia} className="w-full h-full object-cover" /> : null}
                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                                <div className="absolute bottom-2 left-2 text-white font-bold text-sm drop-shadow-md pr-2 line-clamp-2">
                                   {hotel.ten}

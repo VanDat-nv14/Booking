@@ -163,7 +163,7 @@ const SearchPage = () => {
                                         src={(() => {
                                             const raw = hotel.hinhAnhBia || hotel.viTri?.hinhAnh || null;
                                             if (!raw) return 'https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80';
-                                            return raw.startsWith('http') ? raw : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + raw;
+                                            return (raw.startsWith('http') || raw.startsWith('data:')) ? raw : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + raw;
                                         })()}
                                         alt={hotel.ten}
                                         className="w-full h-full object-cover"
