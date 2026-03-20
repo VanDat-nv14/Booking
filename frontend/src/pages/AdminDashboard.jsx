@@ -363,6 +363,7 @@ const AdminDashboard = () => {
   // Luôn hiển thị bản đồ để gắn tọa độ khách sạn
   const [showMapPickerForCoords, setShowMapPickerForCoords] = useState(true);
   const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [geocoding, setGeocoding] = useState(false);
 
   // Hotel Manager Account Form State
   const [showManagerPw, setShowManagerPw] = useState(false);
@@ -532,6 +533,35 @@ const AdminDashboard = () => {
     }
   }, [activeTab, fetchBookings, fetchUsers, fetchRevenueReport]);
 
+  // Auto-geocode: debounced khi diaChi + quocGiaId + tinhThanhId thay đổi (chỉ khi modal hotel mở)
+  useEffect(() => {
+    if (!showHotelModal) return;
+    const diaChi = hotelFormData.diaChi?.trim();
+    const quocGiaId = hotelFormData.quocGiaId;
+    const tinhThanhId = hotelFormData.tinhThanhId;
+    if (!diaChi || !quocGiaId || !tinhThanhId) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const qg = quocGias.find(q => q.id === quocGiaId);
+        const tt = tinhThanhs.find(t => t.id === tinhThanhId);
+        const vtName = hotelFormData.viTriName?.trim() || viTrisInProvince.find(v => v.id === hotelFormData.viTriId)?.ten || '';
+        const parts = [diaChi, vtName, tt?.ten, qg?.ten].filter(Boolean);
+        const query = parts.join(', ');
+        if (!query) return;
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, {
+          headers: { 'Accept-Language': 'vi' }
+        });
+        const data = await res.json();
+        if (data?.[0]?.lat && data?.[0]?.lon) {
+          setHotelFormData(f => ({ ...f, viDo: parseFloat(data[0].lat), kinhDo: parseFloat(data[0].lon) }));
+        }
+      } catch { /* silent - giữ nút "Ghim từ địa chỉ" để thử lại thủ công */ }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [showHotelModal, hotelFormData.diaChi, hotelFormData.quocGiaId, hotelFormData.tinhThanhId, hotelFormData.viTriId, hotelFormData.viTriName, quocGias, tinhThanhs, viTrisInProvince]);
+
   // ── User Actions ──────────────────────────────
   const handleSaveUser = (savedUser, isEdit) => {
     setUsers((prev) =>
@@ -569,7 +599,7 @@ const AdminDashboard = () => {
   };
 
   const handleDelete = async (user) => {
-    let confirmMsg = `Xóa tài khoản "${user.hoTen}" (${user.email})?\n\nNếu người dùng có lịch sử đặt phòng, tài khoản sẽ bị vô hiệu hóa thay vì xóa hẳn.`;
+    let confirmMsg = `Xóa tài khoản "${user.hoTen}" (${user.email})?\n\nNếu người dùng có lịch sử đặt phòng, đánh giá hoặc đang quản lý khách sạn, tài khoản sẽ bị vô hiệu hóa và ẩn thông tin thay vì xóa hẳn. Lịch sử giao dịch được giữ nguyên.`;
     
     if (user.chucVu === 'Admin') {
         confirmMsg = `⚠️ CẢNH BÁO XÓA QUẢN TRỊ VIÊN ⚠️\n\nBạn đang cố gắng xóa một tài khoản Admin ("${user.hoTen}").\nHành động này có thể ảnh hưởng nghiêm trọng đến hệ thống.\n\nBạn có HIỂU RÕ hành động này và vẫn muốn tiếp tục?`;
@@ -637,13 +667,17 @@ const AdminDashboard = () => {
       await axiosClient.delete(`/hotels/${id}`);
       setHotels(hotels.filter((h) => h.id !== id));
       showToast('Đã xóa khách sạn!');
-    } catch { showToast('Xóa thất bại!', 'error'); }
+    } catch (err) {
+      const msg = err?.response?.data?.error || 'Xóa thất bại!';
+      showToast(msg, 'error');
+    }
   };
 
   const handleHotelSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (!editingHotel && hotelFormData.managerEmail) {
+      // Chỉ validate mật khẩu khi nhập (tạo quản lý mới). Để trống = gán user đã tồn tại
+      if (!editingHotel && hotelFormData.managerEmail && hotelFormData.managerPassword) {
         const err = validatePassword(hotelFormData.managerPassword);
         if (err) { setManagerPwError(err); return; }
         if (hotelFormData.managerPassword !== hotelFormData.managerConfirmPassword) {
@@ -688,7 +722,13 @@ const AdminDashboard = () => {
       setNewImageUrl('');
       fetchHotels();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Lưu thất bại!', 'error');
+      const data = err.response?.data;
+      let msg = data?.error || 'Lưu thất bại!';
+      if (data?.errors && typeof data.errors === 'object') {
+        const first = Object.values(data.errors)[0];
+        if (first) msg = String(first);
+      }
+      showToast(msg, 'error');
     }
   };
 
@@ -1301,6 +1341,35 @@ const AdminDashboard = () => {
                       className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg transition">
                       Đặt về mặc định
                     </button>
+                    <button type="button" disabled={geocoding || !hotelFormData.diaChi?.trim()}
+                      onClick={async () => {
+                        setGeocoding(true);
+                        try {
+                          const qg = quocGias.find(q => q.id === hotelFormData.quocGiaId);
+                          const tt = tinhThanhs.find(t => t.id === hotelFormData.tinhThanhId);
+                          const vtName = hotelFormData.viTriName?.trim() || viTrisInProvince.find(v => v.id === hotelFormData.viTriId)?.ten || '';
+                          const parts = [hotelFormData.diaChi?.trim(), vtName, tt?.ten, qg?.ten].filter(Boolean);
+                          const query = parts.join(', ');
+                          if (!query) { showToast('Nhập địa chỉ và chọn tỉnh thành để ghim tự động', 'error'); return; }
+                          const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, {
+                            headers: { 'Accept-Language': 'vi' }
+                          });
+                          const data = await res.json();
+                          if (data?.[0]?.lat && data?.[0]?.lon) {
+                            setHotelFormData(f => ({ ...f, viDo: parseFloat(data[0].lat), kinhDo: parseFloat(data[0].lon) }));
+                            showToast('Đã ghim vị trí từ địa chỉ!');
+                          } else {
+                            showToast('Không tìm thấy tọa độ. Thử địa chỉ chi tiết hơn hoặc click trên bản đồ.', 'error');
+                          }
+                        } catch (e) {
+                          showToast('Lỗi geocoding: ' + (e.message || 'Thử lại'), 'error');
+                        } finally {
+                          setGeocoding(false);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition">
+                      {geocoding ? '⏳ Đang tìm...' : '📍 Ghim từ địa chỉ'}
+                    </button>
                   </div>
                   {showMapPickerForCoords && (
                     <div className="rounded-xl overflow-hidden border border-amber-200 shadow-sm bg-white flex flex-col mt-2">
@@ -1399,7 +1468,7 @@ const AdminDashboard = () => {
                     </div>
                     
                     <div className="col-span-2">
-                      <label className="text-xs font-semibold text-gray-600 block mb-1">Mật khẩu *</label>
+                      <label className="text-xs font-semibold text-gray-600 block mb-1">Mật khẩu (để trống nếu gán user đã tồn tại)</label>
                       <div className="relative">
                         <input type={showManagerPw ? 'text' : 'password'} value={hotelFormData.managerPassword} 
                           onChange={(e) => { 
@@ -1454,7 +1523,7 @@ const AdminDashboard = () => {
                     
                     {hotelFormData.managerPassword && (
                       <div className="col-span-2">
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Xác nhận mật khẩu *</label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Xác nhận mật khẩu</label>
                         <div className="relative">
                           <input
                             type={showManagerConfirmPw ? 'text' : 'password'}

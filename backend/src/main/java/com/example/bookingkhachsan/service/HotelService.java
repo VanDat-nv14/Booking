@@ -8,6 +8,9 @@ import com.example.bookingkhachsan.entity.ViTri;
 import com.example.bookingkhachsan.entity.TinhThanh;
 import com.example.bookingkhachsan.repository.DanhGiaRepository;
 import com.example.bookingkhachsan.repository.DichVuRepository;
+import com.example.bookingkhachsan.repository.KhuyenMaiRepository;
+import com.example.bookingkhachsan.repository.PhieuDatPhongRepository;
+import com.example.bookingkhachsan.repository.PhongRepository;
 import com.example.bookingkhachsan.repository.KhachSanRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,6 +34,9 @@ public class HotelService {
     private final PasswordEncoder passwordEncoder;
     private final DichVuRepository dichVuRepository;
     private final DanhGiaRepository danhGiaRepository;
+    private final PhieuDatPhongRepository phieuDatPhongRepository;
+    private final PhongRepository phongRepository;
+    private final KhuyenMaiRepository khuyenMaiRepository;
 
     private final com.example.bookingkhachsan.repository.ViTriRepository viTriRepository;
 
@@ -124,19 +130,37 @@ public class HotelService {
         KhachSan hotel = new KhachSan();
         mapDtoToEntity(dto, hotel);
 
-        if (dto.getManagerEmail() != null && !dto.getManagerEmail().isBlank()) {
-            if (nguoiDungRepository.existsByEmail(dto.getManagerEmail())) {
-                throw new RuntimeException("Email quản lý đã tồn tại!");
-            }
-            NguoiDung manager = new NguoiDung();
-            manager.setEmail(dto.getManagerEmail());
-            manager.setMatKhau(passwordEncoder.encode(dto.getManagerPassword()));
-            manager.setHoTen(dto.getManagerName() != null && !dto.getManagerName().isBlank() ? dto.getManagerName() : "Quản lý " + dto.getTen());
-            manager.setChucVu("HotelManager");
-            manager.setTrangThai(true);
-            manager.setProvider(NguoiDung.Provider.LOCAL);
+        if (hotel.getViTri() == null) {
+            throw new RuntimeException("Vui lòng chọn tỉnh thành và vị trí (hoặc nhập tên vị trí mới)!");
+        }
 
-            manager = nguoiDungRepository.save(manager);
+        if (dto.getManagerEmail() != null && !dto.getManagerEmail().isBlank()) {
+            String email = dto.getManagerEmail().trim();
+            if (!email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")) {
+                throw new RuntimeException("Email quản lý không hợp lệ!");
+            }
+            NguoiDung manager = nguoiDungRepository.findByEmail(email).orElse(null);
+            if (manager != null) {
+                // Email đã tồn tại: gán user hiện có làm quản lý (không đổi mật khẩu)
+                manager.setChucVu("HotelManager");
+                if (dto.getManagerName() != null && !dto.getManagerName().isBlank()) {
+                    manager.setHoTen(dto.getManagerName().trim());
+                }
+                manager = nguoiDungRepository.save(manager);
+            } else {
+                // Email mới: tạo user quản lý mới (cần mật khẩu)
+                if (dto.getManagerPassword() == null || dto.getManagerPassword().isBlank()) {
+                    throw new RuntimeException("Vui lòng nhập mật khẩu cho quản lý mới!");
+                }
+                manager = new NguoiDung();
+                manager.setEmail(email);
+                manager.setMatKhau(passwordEncoder.encode(dto.getManagerPassword()));
+                manager.setHoTen(dto.getManagerName() != null && !dto.getManagerName().isBlank() ? dto.getManagerName().trim() : "Quản lý " + dto.getTen());
+                manager.setChucVu("HotelManager");
+                manager.setTrangThai(true);
+                manager.setProvider(NguoiDung.Provider.LOCAL);
+                manager = nguoiDungRepository.save(manager);
+            }
             hotel.setNguoiQuanLy(manager);
         }
 
@@ -180,8 +204,26 @@ public class HotelService {
         return khachSanRepository.save(hotel);
     }
 
+    @Transactional
     public void deleteHotel(Integer id) {
-        khachSanRepository.deleteById(id);
+        KhachSan hotel = getDetails(id);
+        var bookings = phieuDatPhongRepository.findByPhong_KhachSan_IdOrderByNgayDatDesc(id);
+        if (!bookings.isEmpty()) {
+            throw new RuntimeException("Không thể xóa khách sạn đã có đặt phòng. Vui lòng hủy hoặc hoàn tất các đặt phòng trước.");
+        }
+        for (DanhGia d : danhGiaRepository.findByKhachSanId(id)) {
+            danhGiaRepository.delete(d);
+        }
+        for (com.example.bookingkhachsan.entity.DichVu dv : dichVuRepository.findByKhachSanId(id)) {
+            dichVuRepository.delete(dv);
+        }
+        for (com.example.bookingkhachsan.entity.Phong p : phongRepository.findByKhachSanId(id)) {
+            phongRepository.delete(p);
+        }
+        for (com.example.bookingkhachsan.entity.KhuyenMai km : khuyenMaiRepository.findByKhachSan_Id(id)) {
+            khuyenMaiRepository.delete(km);
+        }
+        khachSanRepository.delete(hotel);
     }
 
     /**
@@ -232,7 +274,7 @@ public class HotelService {
             hotel.setHinhAnhBia(hotel.getHinhAnhs().get(0));
         }
 
-        if (dto.getViTriId() != null) {
+        if (dto.getViTriId() != null && dto.getViTriId() > 0) {
             // Chọn vị trí có sẵn
             com.example.bookingkhachsan.entity.ViTri viTri = new com.example.bookingkhachsan.entity.ViTri();
             viTri.setId(dto.getViTriId());
@@ -251,6 +293,13 @@ public class HotelService {
                         return viTriRepository.save(nv);
                     });
             hotel.setViTri(viTri);
+        } else if (dto.getTinhThanhId() != null && dto.getTinhThanhId() > 0) {
+            // Chỉ chọn tỉnh, chưa chọn vị trí: dùng vị trí đầu tiên của tỉnh hoặc tạo mới
+            java.util.List<com.example.bookingkhachsan.entity.ViTri> list = viTriRepository.findByTinhThanh_Id(dto.getTinhThanhId());
+            com.example.bookingkhachsan.entity.ViTri viTri = list.isEmpty()
+                    ? viTriRepository.save(createDefaultViTri(dto.getTinhThanhId()))
+                    : list.get(0);
+            hotel.setViTri(viTri);
         }
 
         if (dto.getNguoiDungId() != null) {
@@ -258,6 +307,16 @@ public class HotelService {
             nguoiDung.setId(dto.getNguoiDungId());
             hotel.setNguoiQuanLy(nguoiDung);
         }
+    }
+
+    private com.example.bookingkhachsan.entity.ViTri createDefaultViTri(Integer tinhThanhId) {
+        com.example.bookingkhachsan.entity.ViTri v = new com.example.bookingkhachsan.entity.ViTri();
+        v.setTen("Tổng quan");
+        v.setTrangThai(true);
+        com.example.bookingkhachsan.entity.TinhThanh tt = new com.example.bookingkhachsan.entity.TinhThanh();
+        tt.setId(tinhThanhId);
+        v.setTinhThanh(tt);
+        return v;
     }
 }
 

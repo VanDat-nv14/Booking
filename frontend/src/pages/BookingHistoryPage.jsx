@@ -554,7 +554,7 @@ const BookingCard = ({ b, onDetail, muted }) => {
         {/* Hotel thumb */}
         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-100 flex-shrink-0 flex items-center justify-center text-2xl">
           {(b.hinhAnhBia || b.phong?.khachSan?.hinhAnhBia)
-            ? <img src={b.hinhAnhBia || b.phong?.khachSan?.hinhAnhBia} alt="" className="w-full h-full object-cover" />
+            ? <img src={(() => { const u = b.hinhAnhBia || b.phong?.khachSan?.hinhAnhBia; return (u?.startsWith('http') || u?.startsWith('data:')) ? u : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + u; })()} alt="" className="w-full h-full object-cover" />
             : '🏨'}
         </div>
 

@@ -12,9 +12,12 @@ import java.util.Set;
 @Repository
 public interface DanhGiaRepository extends JpaRepository<DanhGia, Integer> {
     List<DanhGia> findByKhachSanIdAndTrangThai(Integer khachSanId, String trangThai);
+    List<DanhGia> findByKhachSanId(Integer khachSanId);
     boolean existsByPhieuDatPhongId(Integer phieuDatPhongId);
 
     /** Batch check which booking ids have a review (avoid N+1 in getBookingsByUser). */
     @Query("SELECT DISTINCT d.phieuDatPhong.id FROM DanhGia d WHERE d.phieuDatPhong.id IN :ids")
     Set<Integer> findPhieuDatPhongIdsWithReview(@Param("ids") List<Integer> ids);
+
+    long countByNguoiDungId(Integer nguoiDungId);
 }

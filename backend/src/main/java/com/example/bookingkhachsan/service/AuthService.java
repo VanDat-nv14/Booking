@@ -4,6 +4,8 @@ import com.example.bookingkhachsan.dto.AuthDto;
 import com.example.bookingkhachsan.entity.NguoiDung;
 import com.example.bookingkhachsan.repository.NguoiDungRepository;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Optional;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -102,31 +104,72 @@ public class AuthService {
     }
     
     // Helper to process OAuth2 login
-    public AuthDto.AuthResponse processOAuthPostLogin(String email, String name, String providerInfo, String avatarUrl) {
-        var userOptional = repository.findByEmail(email);
+    public AuthDto.AuthResponse processOAuthPostLogin(String email, String name, String providerInfo, String avatarUrl, String providerId) {
+        NguoiDung.Provider providerEnum = NguoiDung.Provider.valueOf(providerInfo.toUpperCase());
+        // Fallback email khi Facebook không trả (user ẩn email)
+        if ((email == null || email.isBlank()) && providerEnum == NguoiDung.Provider.FACEBOOK && providerId != null) {
+            email = providerId + "@facebook.placeholder";
+        }
+        if (email == null || email.isBlank()) {
+            throw new RuntimeException("OAuth2 không trả về email. Vui lòng cấp quyền email hoặc đăng nhập bằng cách khác.");
+        }
+
+        // Bước 1: Tìm chính xác theo provider + providerId (ưu tiên nhất)
+        var userOptional = providerId != null && !providerId.isBlank()
+                ? repository.findByProviderAndProviderId(providerEnum, providerId)
+                : Optional.<NguoiDung>empty();
+
+        // Bước 2: Nếu không tìm thấy theo providerId, tìm theo email
+        // NHƯNG chỉ dùng nếu provider khớp hoặc user là LOCAL (chưa có OAuth)
+        if (userOptional.isEmpty()) {
+            var byEmail = repository.findByEmail(email);
+            if (byEmail.isPresent()) {
+                NguoiDung found = byEmail.get();
+                // Chỉ tái sử dụng account nếu:
+                //   - cùng provider, hoặc
+                //   - account chưa có provider (LOCAL / null) → liên kết lần đầu
+                if (found.getProvider() == null
+                        || found.getProvider() == NguoiDung.Provider.LOCAL
+                        || found.getProvider() == providerEnum) {
+                    userOptional = byEmail;
+                }
+                // Nếu account thuộc provider KHÁC (vd đang login Facebook nhưng tìm thấy tài khoản Google)
+                // → KHÔNG dùng, để tạo tài khoản mới riêng biệt bên dưới
+            }
+        }
+
         NguoiDung user;
-        
         if (userOptional.isPresent()) {
             user = userOptional.get();
-            // Update provider if needed or just log them in
+            // Cập nhật provider nếu account chưa liên kết
             if (user.getProvider() == null || user.getProvider() == NguoiDung.Provider.LOCAL) {
-                // If previously local, maybe link? For now, we trust the email.
-                user.setProvider(NguoiDung.Provider.valueOf(providerInfo.toUpperCase()));
+                user.setProvider(providerEnum);
             }
-            // Luôn cập nhật avatar từ Google khi có (để lấy ảnh mới nhất)
+            if (providerId != null && !providerId.isBlank()) {
+                user.setProviderId(providerId);
+            }
             if (avatarUrl != null && !avatarUrl.isBlank()) {
                 user.setAvatarUrl(avatarUrl);
             }
             repository.save(user);
         } else {
+            // Tạo tài khoản mới cho provider này
             user = new NguoiDung();
-            user.setEmail(email);
-            user.setHoTen(name);
-            user.setMatKhau(passwordEncoder.encode("OAUTH2_Generated_" + java.util.UUID.randomUUID())); // Dummy pwd
-            user.setSdt(""); // Optional or placeholder
+            // Nếu email bị trùng với account provider khác, dùng email placeholder của provider
+            String finalEmail = email;
+            if (repository.findByEmail(email).isPresent()) {
+                // Email đã bị dùng bởi provider khác → tạo email giả riêng
+                finalEmail = (providerId != null ? providerId : java.util.UUID.randomUUID().toString())
+                        + "@" + providerInfo.toLowerCase() + ".placeholder";
+            }
+            user.setEmail(finalEmail);
+            user.setHoTen(name != null && !name.isBlank() ? name : "User");
+            user.setMatKhau(passwordEncoder.encode("OAUTH2_Generated_" + java.util.UUID.randomUUID()));
+            user.setSdt("");
             user.setChucVu("User");
             user.setTrangThai(true);
-            user.setProvider(NguoiDung.Provider.valueOf(providerInfo.toUpperCase()));
+            user.setProvider(providerEnum);
+            user.setProviderId(providerId);
             if (avatarUrl != null && !avatarUrl.isBlank()) {
                 user.setAvatarUrl(avatarUrl);
             }

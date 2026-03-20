@@ -11,7 +11,7 @@ const HotelCard = ({ hotel }) => {
   const stars = hotel.soSao || 0;
   const avg = hotel.diemDanhGiaTrungBinh ? Number(hotel.diemDanhGiaTrungBinh).toFixed(1) : null;
   const rawCover = hotel.hinhAnhBia || hotel.viTri?.hinhAnh || null;
-  const cover = rawCover && !rawCover.startsWith('http') ? BACKEND + rawCover : rawCover;
+  const cover = rawCover && (rawCover.startsWith('http') || rawCover.startsWith('data:')) ? rawCover : rawCover ? BACKEND + rawCover : null;
 
   return (
     <Link to={`/hotels/${hotel.id}`} target="_blank" rel="noopener noreferrer" className="group bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col">

@@ -62,6 +62,12 @@ export const AuthProvider = ({ children }) => {
         setUser(prev => prev ? { ...prev, avatarUrl: url || null } : prev);
     };
 
+    // Cap nhat email sau khi user thay doi tren trang profile
+    const updateEmail = (email) => {
+        if (email) localStorage.setItem('email', email);
+        setUser(prev => prev ? { ...prev, email: email || prev.email } : prev);
+    };
+
     // Dang xuat: xoa TOAN BO du lieu phien
     const logout = () => {
         localStorage.removeItem('token');
@@ -82,7 +88,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, loading, hasRole, updateAvatar }}>
+        <AuthContext.Provider value={{ user, token, login, logout, loading, hasRole, updateAvatar, updateEmail }}>
             {children}
         </AuthContext.Provider>
     );

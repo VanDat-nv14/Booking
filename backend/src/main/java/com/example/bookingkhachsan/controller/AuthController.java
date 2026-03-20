@@ -70,23 +70,41 @@ public class AuthController {
 
     @GetMapping("/oauth2/success")
     public ResponseEntity<Void> oauth2Success(org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken token, jakarta.servlet.http.HttpServletResponse response) throws java.io.IOException {
-        String email = token.getPrincipal().getAttribute("email");
-        String name = token.getPrincipal().getAttribute("name");
-        // Google dùng "picture"; một số provider dùng picture_url, image
-        String picture = token.getPrincipal().getAttribute("picture");
-        if (picture == null || picture.isBlank()) {
-            picture = token.getPrincipal().getAttribute("picture_url");
-            if (picture == null || picture.isBlank()) {
-                picture = token.getPrincipal().getAttribute("image");
-            }
-        }
-        // Distinguish provider? 
-        // token.getAuthorizedClientRegistrationId() usually works if in valid context, 
-        // but here we just get provider from token.
-        // Actually OAuth2AuthenticationToken has 'getAuthorizedClientRegistrationId()'
+        var attrs = token.getPrincipal().getAttributes();
+        String email = getStringAttr(attrs, "email");
+        String name = getStringAttr(attrs, "name");
         String provider = token.getAuthorizedClientRegistrationId(); // google, facebook
 
-        AuthDto.AuthResponse authResponse = service.processOAuthPostLogin(email, name, provider, picture);
+        // Google dùng "sub" làm unique ID; Facebook dùng "id"
+        String providerId = getStringAttr(attrs, "sub");   // Google
+        if (providerId == null || providerId.isBlank()) {
+            providerId = getStringAttr(attrs, "id");       // Facebook
+        }
+
+        // Google dùng "picture" (string URL); Facebook dùng picture.data.url (object Map)
+        // getStringAttr() gọi .toString() → với Facebook sẽ ra chuỗi "{data={url=...}}" không phải URL
+        // → Phải kiểm tra rawPicture trực tiếp
+        String picture = null;
+        Object rawPicture = attrs.get("picture");
+        if (rawPicture instanceof String s && s.startsWith("http")) {
+            // Google: trả về string URL trực tiếp
+            picture = s.trim();
+        } else if (rawPicture instanceof java.util.Map<?, ?> picMap) {
+            // Facebook: { data: { url: "https://..." } }
+            Object data = picMap.get("data");
+            if (data instanceof java.util.Map<?, ?> dataMap && dataMap.get("url") != null) {
+                picture = dataMap.get("url").toString();
+            }
+        }
+        // Fallback cho các provider khác
+        if (picture == null || picture.isBlank()) {
+            picture = getStringAttr(attrs, "picture_url");
+        }
+        if (picture == null || picture.isBlank()) {
+            picture = getStringAttr(attrs, "image");
+        }
+
+        AuthDto.AuthResponse authResponse = service.processOAuthPostLogin(email, name, provider, picture, providerId);
         
         // Encode parameters to ensure URL safety
         String redirectUrl = String.format("%s/auth/callback?token=%s&role=%s&hoTen=%s&userId=%d&email=%s&avatarUrl=%s",
@@ -101,5 +119,10 @@ public class AuthController {
         // Redirect to Frontend
         response.sendRedirect(redirectUrl);
         return ResponseEntity.ok().build();
+    }
+
+    private static String getStringAttr(java.util.Map<String, Object> attrs, String key) {
+        Object v = attrs.get(key);
+        return v != null ? v.toString().trim() : null;
     }
 }
