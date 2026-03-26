@@ -96,5 +96,6 @@ public class PhongService {
         phong.setTang(dto.getTang());
         phong.setSoPhong(dto.getSoPhong());
         phong.setMoTa(dto.getMoTa());
+        phong.setSoKhach(dto.getSoKhach());
     }
 }

@@ -45,6 +45,9 @@ public class Phong {
     @Column(name = "so_phong", length = 20)
     private String soPhong;       // Ma phong: "101", "202A"
 
+    @Column(name = "so_khach")
+    private Integer soKhach;
+
     @Column(name = "mo_ta", columnDefinition = "NVARCHAR(MAX)")
     private String moTa;
 }

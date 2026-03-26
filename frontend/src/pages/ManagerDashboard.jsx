@@ -789,7 +789,7 @@ const ManagerDashboard = () => {
                             <div className="flex items-center justify-between">
                                 <h3 className="font-semibold text-gray-700">Danh Sách Phòng ({rooms.length})</h3>
                                 <button
-                                    onClick={() => { setEditingRoom(null); setRoomForm({ ten: '', maPhong: '', giaTien: '', loaiPhongId: roomTypes[0]?.id || '', tang: '', soPhong: '', trangThai: 'Trống' }); setShowRoomModal(true); }}
+                                    onClick={() => { setEditingRoom(null); setRoomForm({ ten: '', maPhong: '', giaTien: '', loaiPhongId: roomTypes[0]?.id || '', tang: '', soPhong: '', soKhach: '', trangThai: 'Trống' }); setShowRoomModal(true); }}
                                     className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition">
                                     ＋ Thêm Phòng
                                 </button>
@@ -800,6 +800,7 @@ const ManagerDashboard = () => {
                                         <tr className="bg-gray-50 border-b border-gray-100 uppercase text-xs font-semibold text-gray-500">
                                             <th className="px-4 py-3">Phòng</th>
                                             <th className="px-4 py-3">Loại</th>
+                                            <th className="px-4 py-3">Số Khách</th>
                                             <th className="px-4 py-3">Giá Tiền</th>
                                             <th className="px-4 py-3">Trạng Thái</th>
                                             <th className="px-4 py-3 text-right">Hành Động</th>
@@ -814,6 +815,7 @@ const ManagerDashboard = () => {
                                                 <td className="px-4 py-3 text-gray-600">
                                                     {roomTypes.find(t => t.id === r.loaiPhong?.id || t.id === r.loaiPhongId)?.ten || r.loaiPhong?.ten}
                                                 </td>
+                                                <td className="px-4 py-3 text-gray-600 font-semibold">{r.soKhach ? r.soKhach + ' 👥' : '---'}</td>
                                                 <td className="px-4 py-3 text-gray-600">{formatCurrency(r.giaTien || 0)}</td>
                                                 <td className="px-4 py-3">
                                                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${r.trangThai === 'Trống' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
@@ -821,7 +823,7 @@ const ManagerDashboard = () => {
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
-                                                    <button onClick={() => { setEditingRoom(r); setRoomForm({ ten: r.ten, maPhong: r.maPhong, giaTien: r.giaTien, loaiPhongId: r.loaiPhong?.id || r.loaiPhongId, tang: r.tang || '', soPhong: r.soPhong || '', trangThai: r.trangThai || 'Trống' }); setShowRoomModal(true); }} className="text-blue-600 hover:text-blue-800 mr-3 text-xs font-semibold tracking-wide">SỬA</button>
+                                                    <button onClick={() => { setEditingRoom(r); setRoomForm({ ten: r.ten, maPhong: r.maPhong, giaTien: r.giaTien, loaiPhongId: r.loaiPhong?.id || r.loaiPhongId, tang: r.tang || '', soPhong: r.soPhong || '', soKhach: r.soKhach || '', trangThai: r.trangThai || 'Trống' }); setShowRoomModal(true); }} className="text-blue-600 hover:text-blue-800 mr-3 text-xs font-semibold tracking-wide">SỬA</button>
                                                     <button onClick={() => handleDeleteRoom(r.id)} className="text-red-500 hover:text-red-700 text-xs font-semibold tracking-wide">XÓA</button>
                                                 </td>
                                             </tr>
@@ -1118,6 +1120,10 @@ const ManagerDashboard = () => {
                                 <div>
                                     <label className="text-xs font-semibold text-gray-600">Giá Tiền *</label>
                                     <input required type="number" value={roomForm.giaTien} onChange={e => setRoomForm({...roomForm, giaTien: e.target.value})} className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-600">Số người (Khách) *</label>
+                                    <input required type="number" min="1" value={roomForm.soKhach || ''} onChange={e => setRoomForm({...roomForm, soKhach: e.target.value})} className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="VD: 2" />
                                 </div>
                                 <div className="col-span-2">
                                     <label className="text-xs font-semibold text-gray-600">Loại Phòng *</label>

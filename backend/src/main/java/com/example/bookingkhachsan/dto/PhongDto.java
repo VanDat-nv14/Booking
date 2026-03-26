@@ -29,4 +29,5 @@ public class PhongDto {
     private Integer tang;
     private String soPhong;
     private String moTa;
+    private Integer soKhach;
 }
