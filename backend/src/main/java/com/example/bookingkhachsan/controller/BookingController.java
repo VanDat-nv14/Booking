@@ -88,6 +88,15 @@ public class BookingController {
         return ResponseEntity.ok(bookingService.getBookingsByHotel(hotelId));
     }
 
+    /** GET /api/bookings/hotel/{hotelId}/revenue — Bao cao doanh thu cua hotel (HotelManager) */
+    @GetMapping("/bookings/hotel/{hotelId}/revenue")
+    @PreAuthorize("hasAnyAuthority('ROLE_Admin', 'ROLE_HotelManager')")
+    public ResponseEntity<BookingDto.HotelRevenueReport> getHotelRevenue(
+            @PathVariable Integer hotelId,
+            @RequestParam(required = false, defaultValue = "2026") Integer year) {
+        return ResponseEntity.ok(bookingService.getHotelRevenueReport(hotelId, year));
+    }
+
     // =====================================================
     // STATE TRANSITIONS
     // =====================================================

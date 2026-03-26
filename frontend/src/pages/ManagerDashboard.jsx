@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axiosClient from '../api/axiosClient';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
+import * as XLSX from 'xlsx';
 
 // --- Icon Components ---
 const Icon = ({ d, className = "w-6 h-6" }) => (
@@ -116,7 +118,10 @@ const HotelImageAdder = ({ hotelId, onAdded }) => {
                     <input type="file" id="hotelFileInput" accept="image/*" multiple onChange={handleFileChange} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 outline-none" />
                     {previews.length > 0 && (
                         <div className="flex flex-wrap gap-2">
-                            {previews.map((src, i) => <img key={i} src={src} alt="preview" className="h-16 w-auto rounded object-cover shadow-sm" />)}
+                            {previews.map((src, i) => (
+                                <img key={i} src={src} alt="preview" className="h-16 w-auto rounded object-cover shadow-sm bg-gray-200"
+                                    onError={e => { e.target.onerror = null; e.target.src = 'https://placehold.co/400x200/e2e8f0/94a3b8?text=Image+Error'; }} />
+                            ))}
                         </div>
                     )}
                     <button type="button" onClick={handleUpload} disabled={uploading || filesPos.length === 0} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50">
@@ -181,6 +186,11 @@ const ManagerDashboard = () => {
     // Booking tab filter
     const [bookingTabFilter, setBookingTabFilter] = useState('all');
 
+    // Revenue states
+    const [revenueData, setRevenueData] = useState(null);
+    const [revenueYear, setRevenueYear] = useState(new Date().getFullYear());
+    const [loadingRevenue, setLoadingRevenue] = useState(false);
+
     // Fetch assigned hotel logic
     useEffect(() => {
         fetchMyHotel();
@@ -211,7 +221,61 @@ const ManagerDashboard = () => {
         if (activeTab === 'bookings' || activeTab === 'overview') fetchBookings(silentBookings);
         if (activeTab === 'rooms') fetchRooms(silentRooms);
         if (activeTab === 'services') fetchServices(silentServices);
-    }, [activeTab, myHotel]);
+        if (activeTab === 'revenue') fetchRevenue();
+    }, [activeTab, myHotel, revenueYear]);
+
+    const fetchRevenue = async () => {
+        if (!myHotel) return;
+        setLoadingRevenue(true);
+        try {
+            const res = await axiosClient.get(`/bookings/hotel/${myHotel.id}/revenue?year=${revenueYear}`);
+            setRevenueData(res.data);
+        } catch (err) {
+            console.error('Lỗi tải doanh thu:', err);
+            setToast({ message: 'Không tải được dữ liệu doanh thu', type: 'error' });
+        } finally {
+            setLoadingRevenue(false);
+        }
+    };
+
+    const handleExportExcel = () => {
+        if (!revenueData || !myHotel) return;
+        try {
+            const wsOverview = XLSX.utils.json_to_sheet([{
+                'Khách Sạn': myHotel.ten,
+                'Năm Báo Cáo': revenueYear,
+                'Tổng Doanh Thu (VNĐ)': revenueData.totalRevenue
+            }]);
+
+            const wsMonthly = XLSX.utils.json_to_sheet(
+                revenueData.monthlyStats.map(m => ({
+                    'Tháng': m.month,
+                    'Tiền Phòng (VNĐ)': m.roomRevenue,
+                    'Tiền Dịch Vụ (VNĐ)': m.serviceRevenue,
+                    'Tiền Phụ Thu (VNĐ)': m.surchargeRevenue,
+                    'Tổng Cộng (VNĐ)': m.totalRevenue
+                }))
+            );
+
+            const wsSurcharges = XLSX.utils.json_to_sheet(
+                revenueData.surcharges.map(s => ({
+                    'Mã Đặt Phòng': s.maDatPhong,
+                    'Loại Phụ Thu': s.loaiPhuThu,
+                    'Số Tiền (VNĐ)': s.soTien,
+                    'Ngày Thu': new Date(s.ngayThu).toLocaleString('vi-VN')
+                }))
+            );
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, wsOverview, "Tổng Quan");
+            XLSX.utils.book_append_sheet(wb, wsMonthly, "Doanh Thu Tháng");
+            XLSX.utils.book_append_sheet(wb, wsSurcharges, "Chi Tiết Phụ Thu");
+            XLSX.writeFile(wb, `BaoCaoDoanhThu_${myHotel.ten.replace(/ /g, '_')}_${revenueYear}.xlsx`);
+        } catch (error) {
+            console.error('Lỗi xuất excel:', error);
+            setToast({ message: 'Không thể xuất file Excel', type: 'error' });
+        }
+    };
 
     const fetchBookings = async (silent = false) => {
         if (!myHotel) return;
@@ -363,7 +427,8 @@ const ManagerDashboard = () => {
             });
             showToast('Thêm dịch vụ thành công');
             fetchBookingDetails(selectedBooking.id);
-            fetchBookings(); // Reload background data just in case
+            fetchInvoice(selectedBooking.id); // Cập nhật hóa đơn ngay
+            fetchBookings();
             setServiceToAdd(prev => ({ ...prev, soLuong: 1 }));
         } catch (err) {
             showToast('Lỗi thêm dịch vụ', 'error');
@@ -380,7 +445,8 @@ const ManagerDashboard = () => {
             });
             showToast('Thêm phụ thu thành công');
             fetchBookingDetails(selectedBooking.id);
-            fetchBookings(); // Reload background data just in case
+            fetchInvoice(selectedBooking.id); // Cập nhật hóa đơn ngay
+            fetchBookings();
             setSurchargeToAdd({ loaiPhuThu: '', soTien: '' });
         } catch (err) {
             showToast('Lỗi thêm phụ thu', 'error');
@@ -424,7 +490,8 @@ const ManagerDashboard = () => {
         { id: 'bookings',  label: 'Đặt Phòng',   icon: ICONS.booking },
         { id: 'rooms',     label: 'Phòng',        icon: ICONS.room },
         { id: 'services',  label: 'Dịch Vụ',    icon: ICONS.service },
-        { id: 'settings',  label: 'Cài Đặt KS',  icon: ICONS.revenue },
+        { id: 'revenue',   label: 'Doanh Thu',   icon: ICONS.revenue },
+        { id: 'settings',  label: 'Cài Đặt KS',  icon: ICONS.menu },
         { id: 'profile',   label: 'Hồ Sơ',      icon: ICONS.profile },
     ];
 
@@ -500,22 +567,6 @@ const ManagerDashboard = () => {
 
             {/* ---- MAIN CONTENT ---- */}
             <main className="flex-1 flex flex-col overflow-hidden">
-                {/* Top bar */}
-                <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm">
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-800">
-                            {navItems.find(n => n.id === activeTab)?.label || 'Dashboard'}
-                        </h2>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                            {new Date().toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500 hidden sm:block">Xin chào,</span>
-                        <span className="text-sm font-semibold text-emerald-700">{user?.hoTen}</span>
-                    </div>
-                </header>
-
                 {/* Content area */}
                 <div className="flex-1 overflow-y-auto p-6">
 
@@ -932,9 +983,12 @@ const ManagerDashboard = () => {
                                                             ? 'border-blue-500 ring-2 ring-blue-300'
                                                             : 'border-gray-200'
                                                     }`}>
-                                                        <img src={url.startsWith('http') ? url : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + url} alt={`Hotel ${idx+1}`}
+                                                        <img src={url.startsWith('http') || url.startsWith('data:') ? url : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + url} alt={`Hotel ${idx+1}`}
                                                             className="w-full h-36 object-cover"
-                                                            onError={e => e.target.src='https://placehold.co/400x200/e2e8f0/94a3b8?text=No+Image'} />
+                                                            onError={e => {
+                                                                e.target.onerror = null; 
+                                                                e.target.src='https://placehold.co/400x200/e2e8f0/94a3b8?text=Image+Error';
+                                                            }} />
                                                         
                                                         {/* Top-left: Cover label */}
                                                         {form.hinhAnhBia === url && (
@@ -1284,8 +1338,19 @@ const ManagerDashboard = () => {
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="px-4 py-6 text-center text-gray-400 text-sm">
-                                                {invoiceLoading ? 'Đang tải hóa đơn...' : 'Không có dữ liệu hóa đơn'}
+                                            <div className="divide-y divide-gray-50 text-sm opacity-60">
+                                                {/* Default Fallback for Missing Invoice API data */}
+                                                <div className="flex justify-between px-4 py-2.5">
+                                                    <span className="text-gray-500">🏨 Tiền phòng</span>
+                                                    <span className="font-semibold text-gray-800">{formatCurrency(selectedBooking.thanhTien)}</span>
+                                                </div>
+                                                <div className="flex justify-between px-4 py-3 bg-gray-50">
+                                                    <span className="font-bold text-gray-800">TỔNG CỘNG</span>
+                                                    <span className="text-lg font-bold text-gray-600">{formatCurrency(selectedBooking.thanhTien)}</span>
+                                                </div>
+                                                <div className="px-4 py-2 mb-2 text-center text-xs text-orange-500 italic">
+                                                    {invoiceLoading ? 'Đang tải chi tiết hóa đơn...' : '(Không lấy được hóa đơn chi tiết)'}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -1341,6 +1406,93 @@ const ManagerDashboard = () => {
                 </div>
             )}
 
+            {activeTab === 'revenue' && (
+                <div className="space-y-6 animate-fade-in pb-10">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-gray-100 gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-800">Báo Cáo Doanh Thu</h2>
+                            <p className="text-sm text-gray-500 mt-1">Thống kê doanh thu Phòng, Dịch vụ và Phụ thu chi tiết theo từng tháng</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <select
+                                value={revenueYear}
+                                onChange={e => setRevenueYear(Number(e.target.value))}
+                                className="border border-gray-200 rounded-lg px-4 py-2 bg-gray-50 font-semibold text-gray-700 outline-none focus:border-emerald-500 cursor-pointer transition select-none"
+                            >
+                                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>Năm {y}</option>)}
+                            </select>
+                            <button onClick={handleExportExcel} disabled={!revenueData} className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-bold shadow-sm hover:bg-emerald-700 disabled:opacity-50 transition flex items-center gap-2">
+                                <span>📥</span> Xuất Excel
+                            </button>
+                        </div>
+                    </div>
+
+                    {loadingRevenue ? (
+                        <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm text-gray-500">
+                            <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                            Đang tải phân tích dữ liệu...
+                        </div>
+                    ) : revenueData ? (
+                        <>
+                            {/* Summary Cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <StatCard title="Tổng Doanh Thu (Năm)" value={formatCurrency(revenueData.totalRevenue)} icon={ICONS.revenue} gradient="bg-gradient-to-br from-emerald-500 to-teal-600" />
+                                <StatCard title="Từ Tiền Phòng" value={formatCurrency(revenueData.monthlyStats.reduce((acc, m) => acc + m.roomRevenue, 0))} icon={ICONS.room} gradient="bg-gradient-to-br from-blue-500 to-indigo-600" />
+                                <StatCard title="Từ Dịch Vụ" value={formatCurrency(revenueData.monthlyStats.reduce((acc, m) => acc + m.serviceRevenue, 0))} icon={ICONS.service} gradient="bg-gradient-to-br from-violet-500 to-purple-600" />
+                                <StatCard title="Từ Phụ Thu" value={formatCurrency(revenueData.monthlyStats.reduce((acc, m) => acc + m.surchargeRevenue, 0))} icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" gradient="bg-gradient-to-br from-orange-400 to-red-500" />
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                {/* Chart */}
+                                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-6">Biểu Đồ Doanh Thu Tháng ({revenueYear})</h3>
+                                    <div className="h-80 w-full flex-1 min-h-[320px]">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={revenueData.monthlyStats} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                                                <XAxis dataKey="month" tickFormatter={val => `T${val.split('-')[1]}`} axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} dy={10} />
+                                                <YAxis tickFormatter={val => `${val / 1000000}M`} axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} width={45} />
+                                                <RechartsTooltip cursor={{fill: '#f9fafb'}} contentStyle={{borderRadius: '12px', border: '1px solid #f3f4f6', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} formatter={(value) => formatCurrency(value)} />
+                                                <Legend wrapperStyle={{paddingTop: '20px', fontSize: '13px'}} iconType="circle" />
+                                                <Bar dataKey="roomRevenue" name="Tiền Phòng" stackId="a" fill="#3B82F6" radius={[0, 0, 4, 4]} maxBarSize={48} />
+                                                <Bar dataKey="serviceRevenue" name="Dịch Vụ" stackId="a" fill="#8B5CF6" maxBarSize={48} />
+                                                <Bar dataKey="surchargeRevenue" name="Phụ Thu" stackId="a" fill="#F97316" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+
+                                {/* Surcharges List */}
+                                <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden max-h-[460px]">
+                                    <div className="flex justify-between items-center mb-5">
+                                        <h3 className="text-lg font-bold text-gray-800">Lịch Sử Phụ Thu</h3>
+                                        <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2 py-1 rounded-full">{revenueData.surcharges.length} lượt</span>
+                                    </div>
+                                    {revenueData.surcharges.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center h-full opacity-50 space-y-3 pb-8">
+                                            <span className="text-4xl">📭</span>
+                                            <p className="text-center text-sm text-gray-500">Chưa có dữ liệu phụ thu</p>
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-y-auto pr-2 space-y-3 flex-1 scrollbar-thin scrollbar-thumb-gray-200">
+                                            {revenueData.surcharges.map((s, i) => (
+                                                <div key={i} className="bg-gray-50 hover:bg-gray-100 transition p-4 rounded-xl border border-gray-100 flex justify-between items-center group">
+                                                    <div>
+                                                        <p className="font-semibold text-gray-800 text-sm group-hover:text-amber-700 transition-colors">{s.loaiPhuThu}</p>
+                                                        <p className="text-xs text-gray-500 mt-1 font-mono">{s.maDatPhong} • {new Date(s.ngayThu).toLocaleDateString('vi-VN')}</p>
+                                                    </div>
+                                                    <p className="font-bold text-orange-500 text-sm">+{formatCurrency(s.soTien)}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    ) : null}
+                </div>
+            )}
+
             {/* Checkout Payment Modal */}
             {showCheckoutModal && selectedBooking && (
                 <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
@@ -1353,22 +1505,44 @@ const ManagerDashboard = () => {
                             {/* Tóm tắt hóa đơn */}
                             {invoice && (
                                 <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+                                    {/* Tiền phòng */}
                                     <div className="flex justify-between text-gray-600">
-                                        <span>Tiền phòng ({invoice.soNgay} đêm)</span>
+                                        <span>🏨 Tiền phòng ({invoice.soNgay} đêm)</span>
                                         <span>{formatCurrency(invoice.tienPhong)}</span>
                                     </div>
-                                    {Number(invoice.tienDichVu) > 0 && (
-                                        <div className="flex justify-between text-blue-600">
-                                            <span>Dịch vụ</span>
-                                            <span>{formatCurrency(invoice.tienDichVu)}</span>
+                                    {/* Chi tiết dịch vụ */}
+                                    {invoice.dichVus?.length > 0 && (
+                                        <div className="space-y-1 border-t border-dashed border-gray-200 pt-2">
+                                            <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">🛎 Dịch vụ</p>
+                                            {invoice.dichVus.map((dv, i) => (
+                                                <div key={i} className="flex justify-between text-gray-600 pl-3">
+                                                    <span>{dv.tenDichVu} ×{dv.soLuong}</span>
+                                                    <span>{formatCurrency(dv.thanhTien)}</span>
+                                                </div>
+                                            ))}
+                                            <div className="flex justify-between text-blue-600 font-semibold pl-3">
+                                                <span>Tổng dịch vụ</span>
+                                                <span>{formatCurrency(invoice.tienDichVu)}</span>
+                                            </div>
                                         </div>
                                     )}
-                                    {Number(invoice.tienPhuThu) > 0 && (
-                                        <div className="flex justify-between text-orange-600">
-                                            <span>Phụ thu</span>
-                                            <span>{formatCurrency(invoice.tienPhuThu)}</span>
+                                    {/* Chi tiết phụ thu */}
+                                    {invoice.phuThus?.length > 0 && (
+                                        <div className="space-y-1 border-t border-dashed border-gray-200 pt-2">
+                                            <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">⚠️ Phụ thu</p>
+                                            {invoice.phuThus.map((pt, i) => (
+                                                <div key={i} className="flex justify-between text-gray-600 pl-3">
+                                                    <span>{pt.loaiPhuThu}</span>
+                                                    <span className="text-orange-600">+{formatCurrency(pt.soTien)}</span>
+                                                </div>
+                                            ))}
+                                            <div className="flex justify-between text-orange-600 font-semibold pl-3">
+                                                <span>Tổng phụ thu</span>
+                                                <span>{formatCurrency(invoice.tienPhuThu)}</span>
+                                            </div>
                                         </div>
                                     )}
+                                    {/* Tổng */}
                                     <div className="flex justify-between font-bold text-gray-900 pt-2 border-t">
                                         <span>TỔNG THANH TOÁN</span>
                                         <span className="text-emerald-600 text-lg">{formatCurrency(invoice.tongCong)}</span>

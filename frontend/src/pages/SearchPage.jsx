@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
+import HotelCoverImage from '../components/HotelCoverImage';
 
 const fmt = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n || 0);
 
@@ -159,15 +160,7 @@ const SearchPage = () => {
                             <div key={hotel.id} className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all border border-gray-100 overflow-hidden flex flex-col md:flex-row">
                                 {/* Image */}
                                 <div className="md:w-72 md:flex-shrink-0 h-52 md:h-auto relative overflow-hidden bg-gray-100">
-                                    <img
-                                        src={(() => {
-                                            const raw = hotel.hinhAnhBia || hotel.viTri?.hinhAnh || null;
-                                            if (!raw) return 'https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80';
-                                            return raw.startsWith('http') ? raw : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + raw;
-                                        })()}
-                                        alt={hotel.ten}
-                                        className="w-full h-full object-cover"
-                                    />
+                                    <HotelCoverImage hotel={hotel} alt={hotel.ten} className="w-full h-full object-cover" stockIfNoUrls />
                                     <div className="absolute top-3 left-3 bg-white/90 backdrop-blur text-amber-500 text-xs font-bold px-2 py-1 rounded-lg shadow">
                                         {'★'.repeat(hotel.soSao || 0)}
                                     </div>
