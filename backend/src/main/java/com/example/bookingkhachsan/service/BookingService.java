@@ -628,16 +628,16 @@ public class BookingService {
     @Transactional(readOnly = true)
     public BookingDto.InvoiceResponse getInvoice(Integer bookingId) {
         PhieuDatPhong b = findBookingById(bookingId);
-        long soNgay = b.getNgayDen() != null && b.getNgayDi() != null
+        long soNgay = (b.getNgayDen() != null && b.getNgayDi() != null)
                 ? ChronoUnit.DAYS.between(b.getNgayDen(), b.getNgayDi()) : 1;
         if (soNgay < 1) soNgay = 1;
 
-        BigDecimal giaPhongMot = b.getGiaPhongGoc() != null ? b.getGiaPhongGoc() : BigDecimal.ZERO;
+        BigDecimal giaPhongMot = b.getGiaPhongGoc() != null ? b.getGiaPhongGoc() : (b.getThanhTien() != null ? b.getThanhTien() : BigDecimal.ZERO);
         BigDecimal tienPhong = giaPhongMot.multiply(BigDecimal.valueOf(soNgay));
 
         // Lay danh sach dich vu su dung
         List<ChiTietSuDungDV> ctList = ctsdRepo.findAll().stream()
-                .filter(ct -> ct.getPhieuDatPhong().getId().equals(bookingId))
+                .filter(ct -> ct.getPhieuDatPhong() != null && ct.getPhieuDatPhong().getId().equals(bookingId))
                 .collect(Collectors.toList());
 
         List<BookingDto.InvoiceServiceItem> dichVus = ctList.stream().map(ct -> {
@@ -657,7 +657,7 @@ public class BookingService {
 
         // Lay danh sach phu thu
         List<PhuThu> ptList = phuThuRepo.findAll().stream()
-                .filter(pt -> pt.getPhieuDatPhong().getId().equals(bookingId))
+                .filter(pt -> pt.getPhieuDatPhong() != null && pt.getPhieuDatPhong().getId().equals(bookingId))
                 .collect(Collectors.toList());
 
         List<BookingDto.InvoiceSurchargeItem> phuThus = ptList.stream().map(pt ->
@@ -699,6 +699,95 @@ public class BookingService {
                 .tienCoc(b.getTienCoc())
                 .trangThaiCoc(b.getTrangThaiCoc())
                 .phuongThucThanhToan(b.getPhuongThucThanhToan())
+                .build();
+    }
+
+    // =====================================================
+    // STATISTICS & REPORTS
+    // =====================================================
+    @Transactional(readOnly = true)
+    public BookingDto.HotelRevenueReport getHotelRevenueReport(Integer hotelId, Integer year) {
+        List<PhieuDatPhong> bookings = bookingRepo.findAll().stream()
+                .filter(b -> b.getPhong() != null && b.getPhong().getKhachSan() != null && b.getPhong().getKhachSan().getId().equals(hotelId))
+                .filter(b -> b.getNgayDen() != null && b.getNgayDen().getYear() == year)
+                .filter(b -> "Completed".equals(b.getTrangThai()) || "CheckedOut".equals(b.getTrangThai()))
+                .collect(Collectors.toList());
+
+        List<Integer> bookingIds = bookings.stream().map(PhieuDatPhong::getId).collect(Collectors.toList());
+
+        List<ChiTietSuDungDV> ctsdList = ctsdRepo.findAll().stream()
+                .filter(ct -> ct.getPhieuDatPhong() != null && bookingIds.contains(ct.getPhieuDatPhong().getId()))
+                .collect(Collectors.toList());
+
+        List<PhuThu> ptList = phuThuRepo.findAll().stream()
+                .filter(pt -> pt.getPhieuDatPhong() != null && bookingIds.contains(pt.getPhieuDatPhong().getId()))
+                .collect(Collectors.toList());
+
+        java.util.Map<Integer, BookingDto.MonthlyRevenue> monthlyMap = new java.util.HashMap<>();
+        for (int i = 1; i <= 12; i++) {
+            monthlyMap.put(i, BookingDto.MonthlyRevenue.builder()
+                    .month(year + "-" + String.format("%02d", i))
+                    .roomRevenue(BigDecimal.ZERO)
+                    .serviceRevenue(BigDecimal.ZERO)
+                    .surchargeRevenue(BigDecimal.ZERO)
+                    .totalRevenue(BigDecimal.ZERO)
+                    .build());
+        }
+
+        BigDecimal generalTotal = BigDecimal.ZERO;
+        for (PhieuDatPhong b : bookings) {
+            int month = b.getNgayDen().getMonthValue();
+            BookingDto.MonthlyRevenue mr = monthlyMap.get(month);
+
+            long soNgay = (b.getNgayDen() != null && b.getNgayDi() != null)
+                    ? ChronoUnit.DAYS.between(b.getNgayDen(), b.getNgayDi()) : 1;
+            if (soNgay < 1) soNgay = 1;
+
+            BigDecimal giaPhongMot = b.getGiaPhongGoc() != null ? b.getGiaPhongGoc() : (b.getThanhTien() != null ? b.getThanhTien() : BigDecimal.ZERO);
+            BigDecimal tienPhong = giaPhongMot.multiply(BigDecimal.valueOf(soNgay));
+
+            mr.setRoomRevenue(mr.getRoomRevenue().add(tienPhong));
+            mr.setTotalRevenue(mr.getTotalRevenue().add(tienPhong));
+            generalTotal = generalTotal.add(tienPhong);
+        }
+
+        for (ChiTietSuDungDV ct : ctsdList) {
+            int month = ct.getPhieuDatPhong().getNgayDen().getMonthValue();
+            BookingDto.MonthlyRevenue mr = monthlyMap.get(month);
+            BigDecimal donGia = ct.getDonGiaLucDat() != null ? ct.getDonGiaLucDat() : BigDecimal.ZERO;
+            int sl = ct.getSoLuong() != null ? ct.getSoLuong() : 0;
+            BigDecimal amt = donGia.multiply(BigDecimal.valueOf(sl));
+
+            mr.setServiceRevenue(mr.getServiceRevenue().add(amt));
+            mr.setTotalRevenue(mr.getTotalRevenue().add(amt));
+            generalTotal = generalTotal.add(amt);
+        }
+
+        List<BookingDto.SurchargeDetail> surchargeDetails = new java.util.ArrayList<>();
+        for (PhuThu pt : ptList) {
+            int month = pt.getPhieuDatPhong().getNgayDen().getMonthValue();
+            BookingDto.MonthlyRevenue mr = monthlyMap.get(month);
+            BigDecimal amt = pt.getSoTien() != null ? pt.getSoTien() : BigDecimal.ZERO;
+
+            mr.setSurchargeRevenue(mr.getSurchargeRevenue().add(amt));
+            mr.setTotalRevenue(mr.getTotalRevenue().add(amt));
+            generalTotal = generalTotal.add(amt);
+
+            surchargeDetails.add(BookingDto.SurchargeDetail.builder()
+                    .maDatPhong(pt.getPhieuDatPhong().getMaDatPhong())
+                    .loaiPhuThu(pt.getLoaiPhuThu())
+                    .soTien(amt)
+                    .ngayThu(pt.getCreatedAt())
+                    .build());
+        }
+
+        List<BookingDto.MonthlyRevenue> monthlyStats = new java.util.ArrayList<>(monthlyMap.values());
+        monthlyStats.sort(java.util.Comparator.comparing(BookingDto.MonthlyRevenue::getMonth));
+
+        return BookingDto.HotelRevenueReport.builder()
+                .totalRevenue(generalTotal)
+                .monthlyStats(monthlyStats)
+                .surcharges(surchargeDetails)
                 .build();
     }
 

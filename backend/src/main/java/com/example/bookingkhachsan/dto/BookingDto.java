@@ -272,4 +272,37 @@ public class BookingDto {
         // Phuong thuc thanh toan
         private String phuongThucThanhToan;
     }
+
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class HotelRevenueReport {
+        private BigDecimal totalRevenue;
+        private List<MonthlyRevenue> monthlyStats;
+        private List<SurchargeDetail> surcharges;
+    }
+
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class MonthlyRevenue {
+        private String month; // format "YYYY-MM" hoặc "M" 
+        private BigDecimal roomRevenue;
+        private BigDecimal serviceRevenue;
+        private BigDecimal surchargeRevenue;
+        private BigDecimal totalRevenue;
+    }
+
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class SurchargeDetail {
+        private String maDatPhong;
+        private String loaiPhuThu;
+        private BigDecimal soTien;
+        private java.time.LocalDateTime ngayThu;
+    }
 }

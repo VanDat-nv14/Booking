@@ -11,21 +11,21 @@ const HotelCard = ({ hotel }) => {
   const stars = hotel.soSao || 0;
   const avg = hotel.diemDanhGiaTrungBinh ? Number(hotel.diemDanhGiaTrungBinh).toFixed(1) : null;
   const rawCover = hotel.hinhAnhBia || hotel.viTri?.hinhAnh || null;
-  const cover = rawCover && (rawCover.startsWith('http') || rawCover.startsWith('data:')) ? rawCover : rawCover ? BACKEND + rawCover : null;
+  const cover = rawCover && !rawCover.startsWith('http') && !rawCover.startsWith('data:') ? BACKEND + rawCover : rawCover;
 
   return (
     <Link to={`/hotels/${hotel.id}`} target="_blank" rel="noopener noreferrer" className="group bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col">
       {/* Image */}
-      <div className="w-full h-52 overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-200 relative flex-shrink-0">
+      <div className="w-full h-52 overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-200 relative flex-shrink-0 flex items-center justify-center">
         {cover ? (
           <img
             src={cover}
             alt={hotel.ten}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling?.classList.remove('hidden'); }}
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 z-10"
+            onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.querySelector('.img-fallback')?.classList.remove('hidden'); }}
           />
         ) : null}
-        <div className={`w-full h-full flex items-center justify-center text-6xl opacity-40 ${cover ? 'hidden' : ''}`}>🏨</div>
+        <span className={`img-fallback ${cover ? 'hidden' : ''} text-6xl opacity-40 z-0`}>🏨</span>
         {/* Star badge */}
         <div className="absolute top-3 left-3 bg-white/90 backdrop-blur text-amber-500 text-xs font-bold px-2 py-1 rounded-lg shadow flex items-center gap-0.5">
           {'★'.repeat(stars)}{'☆'.repeat(5 - stars)}
@@ -287,10 +287,47 @@ const HomePage = () => {
       </div>
 
       {/* ── FOOTER ── */}
-      <footer className="bg-gray-900 text-white py-10">
-        <div className="container mx-auto px-4 text-center">
-          <h3 className="text-xl font-bold mb-2">BookingKhachSan</h3>
-          <p className="text-gray-400 text-sm">© 2026 BookingKhachSan. All rights reserved.</p>
+      <footer className="bg-gray-900 text-white">
+        {/* Sponsors */}
+        <div className="border-b border-gray-700/50 py-8">
+          <div className="container mx-auto px-4 text-center">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-5">Nhà Tài Trợ Chính Thức</p>
+            <div className="flex flex-wrap items-center justify-center gap-10">
+              {[
+                { name: 'VNPay', logo: '💳', desc: 'Thanh toán trực tuyến' },
+                { name: 'MoMo', logo: '💜', desc: 'Ví điện tử' },
+                { name: 'Agoda', logo: '🏩', desc: 'Đối tác đặt phòng' },
+                { name: 'Vietnam Airlines', logo: '✈️', desc: 'Hàng không quốc gia' },
+              ].map(s => (
+                <div key={s.name} className="flex flex-col items-center gap-1 opacity-50 hover:opacity-100 transition-opacity cursor-pointer">
+                  <span className="text-3xl">{s.logo}</span>
+                  <span className="text-sm font-bold text-white">{s.name}</span>
+                  <span className="text-xs text-gray-400">{s.desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer bottom */}
+        <div className="py-6">
+          <div className="container mx-auto px-4">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="text-center md:text-left">
+                <h3 className="text-lg font-bold mb-1">BookingKhachSan</h3>
+                <p className="text-gray-400 text-sm">© {new Date().getFullYear()} BookingKhachSan. All rights reserved.</p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-gray-400">
+                <a href="#" className="hover:text-white hover:underline transition-colors">Chính sách bảo mật</a>
+                <span className="text-gray-600">·</span>
+                <a href="#" className="hover:text-white hover:underline transition-colors">Điều khoản sử dụng</a>
+                <span className="text-gray-600">·</span>
+                <a href="#" className="hover:text-white hover:underline transition-colors">Trợ giúp</a>
+                <span className="text-gray-600">·</span>
+                <span className="flex items-center gap-1 text-green-400">🔒 Bảo mật SSL</span>
+              </div>
+            </div>
+          </div>
         </div>
       </footer>
     </div>
