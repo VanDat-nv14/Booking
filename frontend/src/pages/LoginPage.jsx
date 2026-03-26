@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 
@@ -8,7 +8,15 @@ const LoginPage = () => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { login } = useAuth();
+
+    useEffect(() => {
+        if (searchParams.get('oauth_error') === '1') {
+            setError('Đăng nhập bằng mạng xã hội thất bại. Vui lòng thử lại hoặc dùng email/mật khẩu.');
+            setSearchParams({}, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
 
     const handleLogin = async (e) => {
         e.preventDefault();

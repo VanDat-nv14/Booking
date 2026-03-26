@@ -11,4 +11,5 @@ public interface NguoiDungRepository extends JpaRepository<NguoiDung, Integer> {
     Optional<NguoiDung> findByEmail(String email);
     boolean existsByEmail(String email);
     Optional<NguoiDung> findByResetToken(String resetToken);
+    Optional<NguoiDung> findByProviderAndProviderId(NguoiDung.Provider provider, String providerId);
 }

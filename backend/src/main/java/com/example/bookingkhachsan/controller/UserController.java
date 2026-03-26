@@ -33,6 +33,7 @@ public class UserController {
     public static class UpdateProfileRequest {
         private String hoTen;
         private String tenHienThi;
+        private String email;
         private String sdt;
         private String ngaySinh;
         private String quocTich;
@@ -92,6 +93,17 @@ public class UserController {
             }
             if (req.getTenHienThi() != null) {
                 user.setTenHienThi(req.getTenHienThi().trim());
+            }
+            // Cập nhật email (kiểm tra không trùng với tài khoản khác)
+            if (req.getEmail() != null && !req.getEmail().isBlank()) {
+                String newEmail = req.getEmail().trim().toLowerCase();
+                if (!newEmail.equals(user.getEmail())) {
+                    // Kiểm tra email đã tồn tại chưa
+                    if (repository.existsByEmail(newEmail)) {
+                        return ResponseEntity.badRequest().body(Map.of("error", "Email này đã được sử dụng bởi tài khoản khác!"));
+                    }
+                    user.setEmail(newEmail);
+                }
             }
             if (req.getSdt() != null) {
                 user.setSdt(req.getSdt().trim());

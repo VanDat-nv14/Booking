@@ -2,6 +2,7 @@ package com.example.bookingkhachsan.repository;
 
 import com.example.bookingkhachsan.entity.*;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,6 +17,10 @@ import java.util.Optional;
 public interface KhachSanRepository extends JpaRepository<KhachSan, Integer> {
 
     Optional<KhachSan> findByNguoiQuanLy_Id(Integer managerId);
+
+    @Modifying
+    @Query("UPDATE KhachSan k SET k.nguoiQuanLy = null WHERE k.nguoiQuanLy.id = :managerId")
+    int setNguoiQuanLyNullByManagerId(@Param("managerId") Integer managerId);
     
     // Simple search by location and stars
     List<KhachSan> findByViTriId(Integer viTriId);

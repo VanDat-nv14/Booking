@@ -63,6 +63,9 @@ const PolicyBadge = ({ choPhepHuy, mienPhiHuyTruocGio, phiHuyPct }) => {
   );
 };
 
+// Placeholder khi ảnh load lỗi
+const IMG_PLACEHOLDER = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150"%3E%3Crect fill="%23e5e7eb" width="200" height="150"/%3E%3Ctext fill="%239ca3af" x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-size="14"%3E🏨 Ảnh không tải được%3C/text%3E%3C/svg%3E';
+
 // ── Image Gallery ────────────────────────────────────────────────────────
 const ImageGallery = ({ cover, images = [] }) => {
   const [lightbox, setLightbox] = useState(null);
@@ -175,7 +178,7 @@ const ImageGallery = ({ cover, images = [] }) => {
         <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center" onClick={() => setLightbox(null)}>
           <button className="absolute top-4 right-6 text-white text-4xl font-light hover:text-gray-300">×</button>
           <button className="absolute left-4 text-white text-5xl font-light hover:text-gray-300 px-3" onClick={e => { e.stopPropagation(); setLightbox((lightbox - 1 + allImages.length) % allImages.length); }}>‹</button>
-          <img src={allImages[lightbox]} alt="lightbox" className="max-h-[85vh] max-w-[85vw] object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+          <img src={failedUrls.has(allImages[lightbox]) ? IMG_PLACEHOLDER : allImages[lightbox]} alt="lightbox" className="max-h-[85vh] max-w-[85vw] object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} onError={() => onImgError(allImages[lightbox])} />
           <button className="absolute right-4 text-white text-5xl font-light hover:text-gray-300 px-3" onClick={e => { e.stopPropagation(); setLightbox((lightbox + 1) % allImages.length); }}>›</button>
           <div className="absolute bottom-4 text-white/70 text-sm">{lightbox + 1} / {allImages.length}</div>
         </div>
@@ -431,8 +434,12 @@ const HotelDetailPage = () => {
   );
 
   // ── Computed ─────────────────────────────────────────────────────────
-  const BACKEND = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080';
-  const toFullUrl = (url) => url && (url.startsWith('http') ? url : BACKEND + url);
+  const toFullUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http') || url.startsWith('data:')) return url;
+    const base = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080';
+    return base + (url.startsWith('/') ? url : '/' + url);
+  };
   const avgScore = hotel.diemDanhGiaTrungBinh ? Number(hotel.diemDanhGiaTrungBinh) : 0;
 
   // ── Main Render ──────────────────────────────────────────────────────

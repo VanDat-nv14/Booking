@@ -1,6 +1,8 @@
 package com.example.bookingkhachsan.controller;
 
 import com.example.bookingkhachsan.entity.NguoiDung;
+import com.example.bookingkhachsan.repository.DanhGiaRepository;
+import com.example.bookingkhachsan.repository.KhachSanRepository;
 import com.example.bookingkhachsan.repository.NguoiDungRepository;
 import com.example.bookingkhachsan.repository.PhieuDatPhongRepository;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -12,6 +14,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.stream.Collectors;
@@ -30,6 +33,8 @@ public class AdminController {
     private final NguoiDungRepository repository;
     private final PasswordEncoder passwordEncoder;
     private final PhieuDatPhongRepository bookingRepository;
+    private final DanhGiaRepository danhGiaRepository;
+    private final KhachSanRepository khachSanRepository;
 
     // ── Request DTO ──────────────────────────────
     @Data
@@ -185,22 +190,39 @@ public class AdminController {
     }
 
     // ── DELETE user ────────────────────────────────
-    // Nếu user đã có booking/phiếu đặt phòng → soft-delete (vô hiệu hóa)
-    // Nếu chưa có dữ liệu liên kết → hard-delete
+    // Có booking/review/manager → soft-delete + anonymize (giữ lịch sử giao dịch)
+    // Không có dữ liệu liên kết → hard-delete (trước đó bỏ liên kết manager nếu có)
     @DeleteMapping("/users/{id}")
+    @Transactional
     public ResponseEntity<?> deleteUser(@PathVariable Integer id) {
         return repository.findById(id).map(user -> {
             long bookingCount = bookingRepository.findByNguoiDungId(id).size();
-            if (bookingCount > 0) {
-                // Có dữ liệu liên kết → chỉ vô hiệu hóa tài khoản
+            long reviewCount = danhGiaRepository.countByNguoiDungId(id);
+            boolean isManager = khachSanRepository.findByNguoiQuanLy_Id(id).isPresent();
+
+            boolean hasLinkedData = bookingCount > 0 || reviewCount > 0 || isManager;
+
+            if (isManager) {
+                khachSanRepository.setNguoiQuanLyNullByManagerId(id);
+            }
+
+            if (hasLinkedData) {
                 user.setTrangThai(false);
+                user.setEmail("deleted_" + id + "@anon.local");
+                user.setHoTen("Người dùng đã xóa");
+                user.setSdt(null);
+                user.setMatKhau(passwordEncoder.encode(java.util.UUID.randomUUID().toString()));
                 repository.save(user);
+                String reason = java.util.stream.Stream.of(
+                    bookingCount > 0 ? bookingCount + " đặt phòng" : null,
+                    reviewCount > 0 ? reviewCount + " đánh giá" : null,
+                    isManager ? "quản lý khách sạn" : null
+                ).filter(java.util.Objects::nonNull).collect(Collectors.joining(", "));
                 return ResponseEntity.ok(Map.of(
-                    "message", "Tài khoản đã bị vô hiệu hóa (có " + bookingCount + " đặt phòng liên kết, không thể xóa hẳn)",
+                    "message", "Tài khoản đã bị vô hiệu hóa và ẩn thông tin (có " + reason + "). Lịch sử giao dịch được giữ nguyên.",
                     "softDeleted", true
                 ));
             } else {
-                // Không có ràng buộc → xóa hoàn toàn
                 repository.deleteById(id);
                 return ResponseEntity.ok(Map.of(
                     "message", "Xóa người dùng thành công!",

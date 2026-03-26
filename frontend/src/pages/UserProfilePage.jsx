@@ -296,7 +296,7 @@ const BookingDetailModal = ({ bookingId, onClose }) => {
 
 /* ── Main UserProfilePage ─────────────────────────────────── */
 const UserProfilePage = () => {
-  const { user: authUser, updateAvatar } = useAuth();
+  const { user: authUser, updateAvatar, updateEmail } = useAuth();
   const navigate = useNavigate();
   const userId = authUser?.userId;
 
@@ -332,6 +332,7 @@ const UserProfilePage = () => {
   const [pwForm, setPwForm] = useState({ matKhauCu: '', matKhauMoi: '', xacNhanMatKhau: '' });
   const [showPw, setShowPw] = useState({ cu: false, moi: false, xn: false });
 
+
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -362,6 +363,10 @@ const UserProfilePage = () => {
       const res = await axiosClient.put(`/user/${userId}`, fieldData);
       setProfile(prev => ({ ...prev, ...res.data }));
       setEditingField(null);
+      // Đồng bộ email vào AuthContext nếu vừa đổi email
+      if (fieldData.email && res.data.email) {
+        updateEmail(res.data.email);
+      }
       showToast('Cập nhật thành công!');
     } catch (err) {
       showToast(err.response?.data?.error || 'Cập nhật thất bại!', 'error');
@@ -406,18 +411,6 @@ const UserProfilePage = () => {
     } finally { setSaving(false); }
   };
 
-  const handleChangePw = async (e) => {
-    e.preventDefault();
-    if (pwForm.matKhauMoi !== pwForm.xacNhanMatKhau) { showToast('Mật khẩu xác nhận không khớp!', 'error'); return; }
-    setSaving(true);
-    try {
-      await axiosClient.put(`/user/${userId}`, pwForm);
-      setPwForm({ matKhauCu: '', matKhauMoi: '', xacNhanMatKhau: '' });
-      showToast('Đổi mật khẩu thành công!');
-    } catch (err) {
-      showToast(err.response?.data?.error || 'Đổi mật khẩu thất bại!', 'error');
-    } finally { setSaving(false); }
-  };
 
   const BACKEND = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080';
   const avatarUrl = profile.avatarUrl || authUser?.avatarUrl;
@@ -445,9 +438,11 @@ const UserProfilePage = () => {
     },
     {
       key: 'email', label: 'Địa chỉ email', value: profile.email,
-      inputType: 'email', readOnly: true,
+      inputType: 'email', placeholder: 'Nhập địa chỉ email',
       hint: 'Đây là địa chỉ email bạn dùng để đăng nhập. Chúng tôi cũng sẽ gửi các xác nhận đặt chỗ tới địa chỉ này.',
-      badge: { text: 'Xác thực', color: 'bg-green-600 text-white' }
+      badge: profile.email && !profile.email.includes('placeholder')
+        ? { text: 'Xác thực', color: 'bg-green-600 text-white' }
+        : null,
     },
     {
       key: 'sdt', label: 'Số điện thoại', value: profile.sdt,
@@ -483,8 +478,8 @@ const UserProfilePage = () => {
 
   const TABS = [
     { id: 'info', label: '👤 Thông tin cá nhân' },
-    { id: 'security', label: '🔒 Bảo mật' },
   ];
+
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -757,40 +752,6 @@ const UserProfilePage = () => {
           </div>
           </div>
         )}
-
-        {/* TAB: Bảo mật */}
-        {activeTab === 'security' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
-            <form onSubmit={handleChangePw} className="p-6 space-y-5 max-w-lg">
-              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
-                🔐 Mật khẩu mới cần ít nhất 8 ký tự, chứa chữ hoa, số và ký tự @
-              </div>
-              {[
-                { key: 'matKhauCu', label: 'Mật khẩu hiện tại', show: 'cu' },
-                { key: 'matKhauMoi', label: 'Mật khẩu mới', show: 'moi' },
-                { key: 'xacNhanMatKhau', label: 'Xác nhận mật khẩu mới', show: 'xn' },
-              ].map(({ key, label, show }) => (
-                <div key={key}>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</label>
-                  <div className="relative">
-                    <input type={showPw[show] ? 'text' : 'password'} value={pwForm[key]}
-                      onChange={e => setPwForm(f => ({ ...f, [key]: e.target.value }))} required
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 pr-10 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
-                      placeholder="••••••••" />
-                    <button type="button" onClick={() => setShowPw(p => ({ ...p, [show]: !p[show] }))}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                      {showPw[show] ? '🙈' : '👁️'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <button type="submit" disabled={saving}
-                className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition disabled:opacity-60 shadow-sm">
-                {saving ? '⏳ Đang xử lý...' : '🔑 Đổi mật khẩu'}
-              </button>
-            </form>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -806,7 +767,7 @@ const BookingCard = ({ b, onDetail, muted }) => {
         {/* Hotel thumb */}
         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-100 flex-shrink-0 flex items-center justify-center text-2xl">
           {b.phong?.khachSan?.hinhAnhBia
-            ? <img src={b.phong.khachSan.hinhAnhBia} alt="" className="w-full h-full object-cover" />
+            ? <img src={(() => { const u = b.phong.khachSan.hinhAnhBia; return (u?.startsWith('http') || u?.startsWith('data:')) ? u : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + u; })()} alt="" className="w-full h-full object-cover" />
             : '🏨'}
         </div>
 
