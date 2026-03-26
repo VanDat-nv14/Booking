@@ -23,7 +23,13 @@ public class HotelController {
     private final HotelService service;
 
     @GetMapping
+    @PreAuthorize("hasRole('Admin')")
     public ResponseEntity<List<KhachSan>> getAll(@RequestParam(required = false) Integer limit) {
+        return ResponseEntity.ok(service.getAllForAdmin());
+    }
+
+    @GetMapping("/public")
+    public ResponseEntity<List<KhachSan>> getPublic(@RequestParam(required = false) Integer limit) {
         return ResponseEntity.ok(service.getAll(limit));
     }
 
@@ -113,6 +119,19 @@ public class HotelController {
         try {
             service.deleteHotel(id);
             return ResponseEntity.ok().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * PUT /api/hotels/{id}/toggle-status — Admin bật/tắt trạng thái hoạt động của khách sạn
+     */
+    @PutMapping("/{id}/toggle-status")
+    @PreAuthorize("hasRole('Admin')")
+    public ResponseEntity<?> toggleStatus(@PathVariable Integer id) {
+        try {
+            return ResponseEntity.ok(service.toggleStatus(id));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
         }

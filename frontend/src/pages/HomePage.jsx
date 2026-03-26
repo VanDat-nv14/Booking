@@ -97,7 +97,7 @@ const HomePage = () => {
 
   // Load only first 12 hotels for fast initial paint
   useEffect(() => {
-    axiosClient.get('/hotels', { params: { limit: 12 } }).then(res => {
+    axiosClient.get('/hotels/public', { params: { limit: 12 } }).then(res => {
       setHotels(res.data || []);
     }).catch(() => {}).finally(() => setLoadingHotels(false));
   }, []);
@@ -269,22 +269,7 @@ const HomePage = () => {
         </div>
       </div>
 
-      {/* ── CALL TO ACTION ── */}
-      <div className="py-20 bg-gradient-to-r from-blue-600 to-indigo-700 text-center text-white">
-        <h2 className="text-3xl md:text-4xl font-bold mb-4">Sẵn Sàng Cho Kỳ Nghỉ Tiếp Theo?</h2>
-        <p className="text-lg mb-8 max-w-xl mx-auto opacity-90">
-          Đăng ký thành viên để nhận ưu đãi giảm giá lên đến 50% cho lần đặt phòng đầu tiên.
-        </p>
-        <div className="flex gap-3 justify-center flex-wrap">
-          <Link to="/register" className="bg-white text-blue-600 px-8 py-3 rounded-xl font-bold hover:bg-gray-100 transition shadow-lg">
-            Đăng Ký Ngay
-          </Link>
-          <button onClick={() => document.getElementById('hotel-list')?.scrollIntoView({ behavior: 'smooth' })}
-            className="border-2 border-white px-8 py-3 rounded-xl font-bold hover:bg-white/10 transition">
-            Xem Khách Sạn
-          </button>
-        </div>
-      </div>
+
 
       {/* ── FOOTER ── */}
       <footer className="bg-gray-900 text-white">
@@ -292,17 +277,37 @@ const HomePage = () => {
         <div className="border-b border-gray-700/50 py-8">
           <div className="container mx-auto px-4 text-center">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-5">Nhà Tài Trợ Chính Thức</p>
-            <div className="flex flex-wrap items-center justify-center gap-10">
+            <div className="flex flex-wrap items-center justify-center gap-8 md:gap-16">
               {[
-                { name: 'VNPay', logo: '💳', desc: 'Thanh toán trực tuyến' },
-                { name: 'MoMo', logo: '💜', desc: 'Ví điện tử' },
-                { name: 'Agoda', logo: '🏩', desc: 'Đối tác đặt phòng' },
-                { name: 'Vietnam Airlines', logo: '✈️', desc: 'Hàng không quốc gia' },
+                { 
+                  name: 'VNPay', 
+                  logo: <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>,
+                  desc: 'Thanh toán trực tuyến' 
+                },
+                { 
+                  name: 'MoMo', 
+                  logo: <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>,
+                  desc: 'Ví điện tử' 
+                },
+                { 
+                  name: 'Agoda', 
+                  logo: <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+                  desc: 'Đối tác đặt phòng' 
+                },
+                { 
+                  name: 'Vietnam Airlines', 
+                  logo: <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.2-1.1.7l-1.2 3.6 7.6 4.3-3.3 3.3-3.5-.9-1.3 1.3 3.4 2.1 2.1 3.4 1.3-1.3-.9-3.5 3.3-3.3 4.3 7.6 3.6-1.2c.5-.2.8-.6.7-1.1z"/></svg>,
+                  desc: 'Hàng không quốc gia' 
+                },
               ].map(s => (
-                <div key={s.name} className="flex flex-col items-center gap-1 opacity-50 hover:opacity-100 transition-opacity cursor-pointer">
-                  <span className="text-3xl">{s.logo}</span>
-                  <span className="text-sm font-bold text-white">{s.name}</span>
-                  <span className="text-xs text-gray-400">{s.desc}</span>
+                <div key={s.name} className="flex flex-col items-center gap-3 text-gray-500 hover:text-white transition-all cursor-pointer group">
+                  <div className="p-4 bg-gray-800 rounded-2xl group-hover:bg-blue-600 group-hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all duration-300 transform group-hover:-translate-y-1">
+                    {s.logo}
+                  </div>
+                  <div className="text-center">
+                    <span className="block text-sm font-bold text-gray-300 group-hover:text-white transition-colors">{s.name}</span>
+                    <span className="block text-xs text-gray-600 group-hover:text-blue-200 transition-colors mt-0.5">{s.desc}</span>
+                  </div>
                 </div>
               ))}
             </div>

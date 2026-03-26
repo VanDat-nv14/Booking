@@ -38,6 +38,7 @@ public class BookingService {
     private final LichSuThanhToanRepository lichSuRepo;
     private final DanhGiaRepository danhGiaRepo;
     private final JdbcTemplate jdbcTemplate;
+    private final EmailService emailService;
 
     // Hoa hong mac dinh 5% neu la mo hinh san
     private static final BigDecimal COMMISSION_RATE = new BigDecimal("0.05");
@@ -89,7 +90,7 @@ public class BookingService {
                     .giaTheoNgay(giaTien)
                     .loaiPhongId(lp.getId())
                     .tenLoaiPhong(lp.getTen())
-                    .soKhach(lp.getSoKhach())
+                    .soKhach(phong.getSoKhach() != null ? phong.getSoKhach() : lp.getSoKhach())
                     .dienTich(lp.getDienTich())
                     .soGiuong(lp.getSoGiuong())
                     .loaiGiuong(lp.getLoaiGiuong())
@@ -298,8 +299,27 @@ public class BookingService {
         booking = bookingRepo.save(booking);
         // Trigger trg_OnBookingStatusChange se tu chuyen TamGiu → DaDat
         log.info("Booking {} confirmed.", booking.getMaDatPhong());
+
+        // Extract du lieu ngay trong transaction (tranh LazyInitializationException trong @Async)
+        try {
+            NguoiDung nd = booking.getNguoiDung();
+            Phong phong  = booking.getPhong();
+            String toEmail    = (nd != null) ? nd.getEmail()  : null;
+            String hoTen      = (nd != null && nd.getHoTen() != null) ? nd.getHoTen() : "Quý khách";
+            String maDat      = booking.getMaDatPhong() != null ? booking.getMaDatPhong() : String.valueOf(booking.getId());
+            String tenPhong   = (phong != null) ? phong.getTen() : "N/A";
+            String tenKS      = (phong != null && phong.getKhachSan() != null) ? phong.getKhachSan().getTen() : "N/A";
+            String ngayDen    = booking.getNgayDen() != null ? booking.getNgayDen().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "N/A";
+            String ngayDi     = booking.getNgayDi()  != null ? booking.getNgayDi().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))  : "N/A";
+            String thanhTien  = booking.getThanhTien() != null ? String.format("%,.0f VNĐ", booking.getThanhTien()) : "N/A";
+
+            emailService.sendBookingConfirmationEmail(toEmail, hoTen, maDat, tenKS, tenPhong, ngayDen, ngayDi, thanhTien);
+        } catch (Exception e) {
+            log.error("Khong the gui email xac nhan booking {}: {}", booking.getMaDatPhong(), e.getMessage());
+        }
         return booking;
     }
+
 
     // =====================================================
     // STATE: PENDING → EXPIRED (Scheduled job)

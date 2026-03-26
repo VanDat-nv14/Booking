@@ -673,6 +673,17 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleToggleHotelStatus = async (id) => {
+    try {
+      const res = await axiosClient.put(`/hotels/${id}/toggle-status`);
+      setHotels(prev => prev.map(h => h.id === id ? res.data : h));
+      const newStatus = res.data.trangThai;
+      showToast(newStatus === 'Ngừng hoạt động' ? 'Đã tắt hoạt động khách sạn!' : 'Đã bật hoạt động khách sạn!');
+    } catch (err) {
+      showToast('Cập nhật trạng thái thất bại!', 'error');
+    }
+  };
+
   const handleHotelSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -1009,22 +1020,41 @@ const AdminDashboard = () => {
                       <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase">Tên</th>
                       <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase">Địa chỉ</th>
                       <th className="px-5 py-3 text-center text-xs font-bold text-gray-500 uppercase">Sao</th>
+                      <th className="px-5 py-3 text-center text-xs font-bold text-gray-500 uppercase">Trạng Thái</th>
                       <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase">Hành động</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {hotels.map((h) => (
-                      <tr key={h.id} className="hover:bg-blue-50 transition">
+                      <tr key={h.id} className={`hover:bg-blue-50 transition ${h.trangThai === 'Ngừng hoạt động' ? 'opacity-60' : ''}`}>
                         <td className="px-5 py-3 font-semibold text-gray-800">{h.ten}</td>
                         <td className="px-5 py-3 text-gray-500">{h.diaChi}</td>
                         <td className="px-5 py-3 text-center text-yellow-500 font-bold">{h.soSao} ★</td>
+                        <td className="px-5 py-3 text-center">
+                          <button
+                            onClick={() => handleToggleHotelStatus(h.id)}
+                            title={h.trangThai === 'Ngừng hoạt động' ? 'Nhấn để bật hoạt động' : 'Nhấn để tắt hoạt động'}
+                            className={`relative inline-flex h-6 w-11 rounded-full transition-colors focus:outline-none ${
+                              h.trangThai === 'Ngừng hoạt động' ? 'bg-gray-300' : 'bg-green-500'
+                            }`}
+                          >
+                            <span className={`inline-block w-4 h-4 mt-1 transform bg-white rounded-full shadow transition-transform ${
+                              h.trangThai === 'Ngừng hoạt động' ? 'translate-x-1' : 'translate-x-6'
+                            }`} />
+                          </button>
+                          <span className={`ml-2 text-xs font-medium ${
+                            h.trangThai === 'Ngừng hoạt động' ? 'text-gray-400' : 'text-green-600'
+                          }`}>
+                            {h.trangThai === 'Ngừng hoạt động' ? 'Ngừng HĐ' : 'Hoạt động'}
+                          </span>
+                        </td>
                         <td className="px-5 py-3 text-right">
                           <button onClick={() => handleEditHotel(h)} className="px-3 py-1 border border-blue-200 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-50 transition mr-2">Sửa</button>
                           <button onClick={() => handleDeleteHotel(h.id)} className="px-3 py-1 border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 transition">Xóa</button>
                         </td>
                       </tr>
                     ))}
-                    {hotels.length === 0 && <tr><td colSpan={4} className="py-12 text-center text-gray-400">Chưa có khách sạn</td></tr>}
+                    {hotels.length === 0 && <tr><td colSpan={5} className="py-12 text-center text-gray-400">Chưa có khách sạn</td></tr>}
                   </tbody>
                 </table>
               </div>

@@ -48,9 +48,20 @@ public class HotelService {
     }
 
     public List<KhachSan> getAll(Integer limit) {
+        List<KhachSan> all;
         if (limit != null && limit > 0) {
-            return khachSanRepository.findAll(PageRequest.of(0, Math.min(limit, 100))).getContent();
+            all = khachSanRepository.findAll(PageRequest.of(0, Math.min(limit, 100))).getContent();
+        } else {
+            all = khachSanRepository.findAll();
         }
+        // Chỉ trả về khách sạn đang hoạt động cho public endpoint
+        return all.stream()
+                .filter(ks -> !"Ngừng hoạt động".equals(ks.getTrangThai()))
+                .collect(Collectors.toList());
+    }
+
+    /** Admin: lấy toàn bộ khách sạn bất kể trạng thái */
+    public List<KhachSan> getAllForAdmin() {
         return khachSanRepository.findAll();
     }
 
@@ -224,6 +235,18 @@ public class HotelService {
             khuyenMaiRepository.delete(km);
         }
         khachSanRepository.delete(hotel);
+    }
+
+    /** Admin: bật/tắt trạng thái hoạt động của khách sạn */
+    @Transactional
+    public KhachSan toggleStatus(Integer id) {
+        KhachSan hotel = getDetails(id);
+        if ("Ngừng hoạt động".equals(hotel.getTrangThai())) {
+            hotel.setTrangThai("Hoạt động");
+        } else {
+            hotel.setTrangThai("Ngừng hoạt động");
+        }
+        return khachSanRepository.save(hotel);
     }
 
     /**
