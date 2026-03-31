@@ -33,6 +33,10 @@ public class HotelDto {
 
     /** Tỉnh thành cha của vị trí mới */
     private Integer tinhThanhId;
+    private String tinhThanhName;
+
+    private Integer quocGiaId;
+    private String quocGiaName;
 
     private Double viDo;
     private Double kinhDo;

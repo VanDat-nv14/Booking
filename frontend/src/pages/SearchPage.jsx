@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import HotelCoverImage from '../components/HotelCoverImage';
+import { IconMapPin, IconBuilding, IconStar } from '../components/icons/UiIcons';
 
 const fmt = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n || 0);
 
@@ -73,17 +74,17 @@ const SearchPage = () => {
     const locationName = flatLocations.find(l => String(l.id) === String(viTriId))?.name;
 
     return (
-        <div className="bg-gray-50 min-h-screen">
+        <div className="bg-slate-50/90 min-h-screen">
             {/* Search bar sticky at top */}
-            <div className="bg-white shadow-md sticky top-0 z-20 py-3 px-4">
-                <div className="container mx-auto flex flex-col md:flex-row gap-2 flex-wrap">
+            <div className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-nav sticky top-0 z-20 py-4 px-4">
+                <div className="container mx-auto px-4 sm:px-6 flex flex-col md:flex-row gap-3 flex-wrap">
                     {/* Location */}
                     <select
                         className="flex-1 min-w-[180px] p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         value={localViTri}
                         onChange={e => setLocalViTri(e.target.value)}
                     >
-                        <option value="">📍 Tất cả điểm đến</option>
+                        <option value="">Tất cả điểm đến</option>
                         {flatLocations.map(loc => (
                             <option key={loc.id} value={loc.id}>{loc.name}</option>
                         ))}
@@ -149,20 +150,25 @@ const SearchPage = () => {
                         <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
                     </div>
                 ) : hotels.length === 0 ? (
-                    <div className="text-center py-20 bg-white rounded-2xl shadow-sm">
-                        <p className="text-4xl mb-4">🏨</p>
+                    <div className="text-center py-20 bg-white rounded-2xl shadow-sm ring-1 ring-slate-100">
+                        <IconBuilding className="w-16 h-16 mx-auto mb-4 text-slate-300" />
                         <p className="text-gray-600 font-medium text-lg">Không tìm thấy khách sạn phù hợp</p>
                         <p className="text-gray-400 text-sm mt-1">Hãy thử thay đổi điều kiện tìm kiếm</p>
                     </div>
                 ) : (
                     <div className="grid md:grid-cols-1 gap-5">
                         {hotels.map(hotel => (
-                            <div key={hotel.id} className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all border border-gray-100 overflow-hidden flex flex-col md:flex-row">
-                                {/* Image */}
-                                <div className="md:w-72 md:flex-shrink-0 h-52 md:h-auto relative overflow-hidden bg-gray-100">
-                                    <HotelCoverImage hotel={hotel} alt={hotel.ten} className="w-full h-full object-cover" stockIfNoUrls />
-                                    <div className="absolute top-3 left-3 bg-white/90 backdrop-blur text-amber-500 text-xs font-bold px-2 py-1 rounded-lg shadow">
-                                        {'★'.repeat(hotel.soSao || 0)}
+                            <div key={hotel.id} className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all border border-gray-100 overflow-hidden flex flex-col md:flex-row md:items-stretch">
+                                {/* Image — chiều cao cố định trên desktop để object-cover hoạt động đúng */}
+                                <div className="md:w-72 md:flex-shrink-0 h-52 md:h-52 md:min-h-[13rem] relative overflow-hidden bg-gray-100">
+                                    <HotelCoverImage hotel={hotel} alt={hotel.ten} className="absolute inset-0 w-full h-full object-cover object-center" stockIfNoUrls />
+                                    <div className="absolute top-3 left-3 bg-white/90 backdrop-blur text-xs font-bold px-2 py-1 rounded-lg shadow flex gap-0.5">
+                                        {Array.from({ length: 5 }).map((_, i) => (
+                                            <IconStar
+                                                key={i}
+                                                className={`w-3 h-3 ${i < (hotel.soSao || 0) ? 'text-amber-500' : 'text-slate-300'}`}
+                                            />
+                                        ))}
                                     </div>
                                     {hotel.diemDanhGiaTrungBinh && (
                                         <div className="absolute top-3 right-3 bg-blue-600 text-white text-sm font-bold w-9 h-9 rounded-xl flex items-center justify-center shadow">
@@ -177,8 +183,9 @@ const SearchPage = () => {
                                         <div className="flex items-start justify-between gap-3 mb-2">
                                             <h3 className="text-xl font-bold text-gray-800 hover:text-blue-600 transition-colors">{hotel.ten}</h3>
                                         </div>
-                                        <p className="text-sm text-gray-500 flex items-center gap-1 mb-2">
-                                            <span>📍</span><span>{hotel.diaChi}</span>
+                                        <p className="text-sm text-gray-500 flex items-center gap-1.5 mb-2">
+                                            <IconMapPin className="w-4 h-4 flex-shrink-0 text-slate-400" />
+                                            <span>{hotel.diaChi}</span>
                                         </p>
                                         {hotel.viTri && (
                                             <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">
@@ -193,7 +200,10 @@ const SearchPage = () => {
                                     <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50">
                                         <div>
                                             {hotel.diemDanhGiaTrungBinh ? (
-                                                <p className="text-sm text-gray-500">⭐ {Number(hotel.diemDanhGiaTrungBinh).toFixed(1)}/5 · {hotel.soLuotDanhGia || 0} đánh giá</p>
+                                                <p className="text-sm text-gray-500 inline-flex items-center gap-1">
+                                                    <IconStar className="w-4 h-4 text-amber-500" />
+                                                    {Number(hotel.diemDanhGiaTrungBinh).toFixed(1)}/5 · {hotel.soLuotDanhGia || 0} đánh giá
+                                                </p>
                                             ) : (
                                                 <p className="text-xs text-gray-400 italic">Chưa có đánh giá</p>
                                             )}

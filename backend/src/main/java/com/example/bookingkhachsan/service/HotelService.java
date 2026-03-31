@@ -6,24 +6,26 @@ import com.example.bookingkhachsan.entity.DichVu;
 import com.example.bookingkhachsan.entity.KhachSan;
 import com.example.bookingkhachsan.entity.ViTri;
 import com.example.bookingkhachsan.entity.TinhThanh;
+import com.example.bookingkhachsan.entity.NguoiDung;
+import com.example.bookingkhachsan.entity.Phong;
 import com.example.bookingkhachsan.repository.DanhGiaRepository;
 import com.example.bookingkhachsan.repository.DichVuRepository;
 import com.example.bookingkhachsan.repository.KhuyenMaiRepository;
 import com.example.bookingkhachsan.repository.PhieuDatPhongRepository;
 import com.example.bookingkhachsan.repository.PhongRepository;
 import com.example.bookingkhachsan.repository.KhachSanRepository;
+import com.example.bookingkhachsan.repository.NguoiDungRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-
 import org.springframework.security.crypto.password.PasswordEncoder;
-import com.example.bookingkhachsan.entity.NguoiDung;
-import com.example.bookingkhachsan.repository.NguoiDungRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
-
 
 @Service
 @RequiredArgsConstructor
@@ -39,9 +41,11 @@ public class HotelService {
     private final KhuyenMaiRepository khuyenMaiRepository;
 
     private final com.example.bookingkhachsan.repository.ViTriRepository viTriRepository;
+    private final com.example.bookingkhachsan.repository.TinhThanhRepository tinhThanhRepository;
+    private final com.example.bookingkhachsan.repository.QuocGiaRepository quocGiaRepository;
 
-    public List<KhachSan> search(Integer viTriId, Integer soSao, java.math.BigDecimal minPrice, java.math.BigDecimal maxPrice, java.time.LocalDate checkIn, java.time.LocalDate checkOut) {
-        if (checkIn == null) checkIn = java.time.LocalDate.now();
+    public List<KhachSan> search(Integer viTriId, Integer soSao, BigDecimal minPrice, BigDecimal maxPrice, LocalDate checkIn, LocalDate checkOut) {
+        if (checkIn == null) checkIn = LocalDate.now();
         if (checkOut == null) checkOut = checkIn.plusDays(1);
         
         return khachSanRepository.findAvailableHotels(viTriId, soSao, minPrice, maxPrice, checkIn, checkOut);
@@ -130,6 +134,8 @@ public class HotelService {
             ri.setSoSaoTong(r.getSoSaoTong());
             ri.setBinhLuan(r.getBinhLuan());
             ri.setTrangThai(r.getTrangThai());
+            ri.setPhanHoi(r.getPhanHoi());
+            ri.setNgayPhanHoi(r.getNgayPhanHoi());
             ri.setNgayDanhGia(r.getNgayDanhGia());
             return ri;
         }).collect(Collectors.toList()));
@@ -195,12 +201,12 @@ public class HotelService {
                     dto.setKinhDo(hotel.getKinhDo());
                     
                     // Tìm giá thấp nhất từ danh sách phòng
-                    java.math.BigDecimal minPrice = null;
+                    BigDecimal minPrice = null;
                     if (hotel.getPhongs() != null && !hotel.getPhongs().isEmpty()) {
                          minPrice = hotel.getPhongs().stream()
-                                .map(com.example.bookingkhachsan.entity.Phong::getGiaTien)
-                                .filter(java.util.Objects::nonNull)
-                                .min(java.math.BigDecimal::compareTo)
+                                .map(Phong::getGiaTien)
+                                .filter(Objects::nonNull)
+                                .min(BigDecimal::compareTo)
                                 .orElse(null);
                     }
                     dto.setGiaThapNhat(minPrice);
@@ -225,10 +231,10 @@ public class HotelService {
         for (DanhGia d : danhGiaRepository.findByKhachSanId(id)) {
             danhGiaRepository.delete(d);
         }
-        for (com.example.bookingkhachsan.entity.DichVu dv : dichVuRepository.findByKhachSanId(id)) {
+        for (DichVu dv : dichVuRepository.findByKhachSanId(id)) {
             dichVuRepository.delete(dv);
         }
-        for (com.example.bookingkhachsan.entity.Phong p : phongRepository.findByKhachSanId(id)) {
+        for (Phong p : phongRepository.findByKhachSanId(id)) {
             phongRepository.delete(p);
         }
         for (com.example.bookingkhachsan.entity.KhuyenMai km : khuyenMaiRepository.findByKhachSan_Id(id)) {
@@ -297,49 +303,78 @@ public class HotelService {
             hotel.setHinhAnhBia(hotel.getHinhAnhs().get(0));
         }
 
+        // Logic xử lý địa điểm 3 cấp (Quốc Gia -> Tỉnh Thành -> Vị Trí)
+        Integer currentQuocGiaId = dto.getQuocGiaId();
+        if (dto.getQuocGiaName() != null && !dto.getQuocGiaName().isBlank()) {
+            com.example.bookingkhachsan.entity.QuocGia qg = quocGiaRepository.findByTen(dto.getQuocGiaName().trim())
+                    .orElseGet(() -> {
+                        com.example.bookingkhachsan.entity.QuocGia nqg = new com.example.bookingkhachsan.entity.QuocGia();
+                        nqg.setTen(dto.getQuocGiaName().trim());
+                        nqg.setTrangThai(true);
+                        return quocGiaRepository.save(nqg);
+                    });
+            currentQuocGiaId = qg.getId();
+        }
+
+        Integer currentTinhThanhId = dto.getTinhThanhId();
+        if (dto.getTinhThanhName() != null && !dto.getTinhThanhName().isBlank() && currentQuocGiaId != null) {
+            final Integer qgId = currentQuocGiaId;
+            com.example.bookingkhachsan.entity.TinhThanh tt = tinhThanhRepository.findByTenAndQuocGia_Id(dto.getTinhThanhName().trim(), qgId)
+                    .orElseGet(() -> {
+                        com.example.bookingkhachsan.entity.TinhThanh ntt = new com.example.bookingkhachsan.entity.TinhThanh();
+                        ntt.setTen(dto.getTinhThanhName().trim());
+                        ntt.setTrangThai(true);
+                        com.example.bookingkhachsan.entity.QuocGia quocGia = new com.example.bookingkhachsan.entity.QuocGia();
+                        quocGia.setId(qgId);
+                        ntt.setQuocGia(quocGia);
+                        return tinhThanhRepository.save(ntt);
+                    });
+            currentTinhThanhId = tt.getId();
+        }
+
         if (dto.getViTriId() != null && dto.getViTriId() > 0) {
             // Chọn vị trí có sẵn
             com.example.bookingkhachsan.entity.ViTri viTri = new com.example.bookingkhachsan.entity.ViTri();
             viTri.setId(dto.getViTriId());
             hotel.setViTri(viTri);
-        } else if (dto.getViTriName() != null && !dto.getViTriName().isBlank() && dto.getTinhThanhId() != null) {
+        } else if (dto.getViTriName() != null && !dto.getViTriName().isBlank() && currentTinhThanhId != null) {
             // Tạo hoặc tìm vị trí mới theo tên + tỉnh thành
+            final Integer ttId = currentTinhThanhId;
             com.example.bookingkhachsan.entity.ViTri viTri = viTriRepository
-                    .findByTenAndTinhThanh_Id(dto.getViTriName().trim(), dto.getTinhThanhId())
+                    .findByTenAndTinhThanh_Id(dto.getViTriName().trim(), ttId)
                     .orElseGet(() -> {
                         com.example.bookingkhachsan.entity.ViTri nv = new com.example.bookingkhachsan.entity.ViTri();
                         nv.setTen(dto.getViTriName().trim());
                         nv.setTrangThai(true);
-                        com.example.bookingkhachsan.entity.TinhThanh tt = new com.example.bookingkhachsan.entity.TinhThanh();
-                        tt.setId(dto.getTinhThanhId());
-                        nv.setTinhThanh(tt);
+                        com.example.bookingkhachsan.entity.TinhThanh tt_ref = new com.example.bookingkhachsan.entity.TinhThanh();
+                        tt_ref.setId(ttId);
+                        nv.setTinhThanh(tt_ref);
                         return viTriRepository.save(nv);
                     });
             hotel.setViTri(viTri);
-        } else if (dto.getTinhThanhId() != null && dto.getTinhThanhId() > 0) {
+        } else if (currentTinhThanhId != null && currentTinhThanhId > 0) {
             // Chỉ chọn tỉnh, chưa chọn vị trí: dùng vị trí đầu tiên của tỉnh hoặc tạo mới
-            java.util.List<com.example.bookingkhachsan.entity.ViTri> list = viTriRepository.findByTinhThanh_Id(dto.getTinhThanhId());
-            com.example.bookingkhachsan.entity.ViTri viTri = list.isEmpty()
-                    ? viTriRepository.save(createDefaultViTri(dto.getTinhThanhId()))
+            List<ViTri> list = viTriRepository.findByTinhThanh_Id(currentTinhThanhId);
+            ViTri viTri = list.isEmpty()
+                    ? viTriRepository.save(createDefaultViTri(currentTinhThanhId))
                     : list.get(0);
             hotel.setViTri(viTri);
         }
 
         if (dto.getNguoiDungId() != null) {
-            com.example.bookingkhachsan.entity.NguoiDung nguoiDung = new com.example.bookingkhachsan.entity.NguoiDung();
+            NguoiDung nguoiDung = new NguoiDung();
             nguoiDung.setId(dto.getNguoiDungId());
             hotel.setNguoiQuanLy(nguoiDung);
         }
     }
 
-    private com.example.bookingkhachsan.entity.ViTri createDefaultViTri(Integer tinhThanhId) {
-        com.example.bookingkhachsan.entity.ViTri v = new com.example.bookingkhachsan.entity.ViTri();
+    private ViTri createDefaultViTri(Integer tinhThanhId) {
+        ViTri v = new ViTri();
         v.setTen("Tổng quan");
         v.setTrangThai(true);
-        com.example.bookingkhachsan.entity.TinhThanh tt = new com.example.bookingkhachsan.entity.TinhThanh();
+        TinhThanh tt = new TinhThanh();
         tt.setId(tinhThanhId);
         v.setTinhThanh(tt);
         return v;
     }
 }
-

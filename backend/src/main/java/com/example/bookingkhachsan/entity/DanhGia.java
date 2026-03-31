@@ -34,8 +34,23 @@ public class DanhGia {
     private String binhLuan;
 
     @Column(name = "trang_thai")
-    private String trangThai; // Chờ duyệt
+    private String trangThai; // Chờ duyệt -> Đã duyệt
 
-    @Column(name = "ngay_danh_gia", insertable = false, updatable = false)
+    @Column(name = "phan_hoi", columnDefinition = "NVARCHAR(MAX)")
+    private String phanHoi;
+
+    @Column(name = "ngay_phan_hoi")
+    private LocalDateTime ngayPhanHoi;
+
+    @Column(name = "ngay_danh_gia")
     private LocalDateTime ngayDanhGia;
+    @com.fasterxml.jackson.annotation.JsonProperty("hoTenKhach")
+    public String getHoTenKhach() {
+        return nguoiDung != null ? nguoiDung.getHoTen() : "Khách ẩn danh";
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("maDatPhong")
+    public String getMaDatPhong() {
+        return phieuDatPhong != null ? phieuDatPhong.getMaDatPhong() : null;
+    }
 }

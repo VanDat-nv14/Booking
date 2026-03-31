@@ -39,6 +39,7 @@ public class BookingService {
     private final DanhGiaRepository danhGiaRepo;
     private final JdbcTemplate jdbcTemplate;
     private final EmailService emailService;
+    private final SystemNotificationService systemNotificationService;
 
     // Hoa hong mac dinh 5% neu la mo hinh san
     private static final BigDecimal COMMISSION_RATE = new BigDecimal("0.05");
@@ -317,6 +318,19 @@ public class BookingService {
         } catch (Exception e) {
             log.error("Khong the gui email xac nhan booking {}: {}", booking.getMaDatPhong(), e.getMessage());
         }
+
+        // Gửi thông báo đẩy (In-app) cho khách hàng
+        try {
+            String title = "Đơn đặt phòng đã được xác nhận";
+            String content = String.format("Mã đơn %s tại %s (%s) đã được xác nhận thành công.", 
+                    booking.getMaDatPhong(), 
+                    booking.getPhong().getKhachSan().getTen(),
+                    booking.getPhong().getTen());
+            systemNotificationService.createDirectNotification(booking.getNguoiDung().getEmail(), title, content, "INFO");
+        } catch (Exception e) {
+            log.warn("Khong the gui thong bao day cho booking {}: {}", booking.getMaDatPhong(), e.getMessage());
+        }
+
         return booking;
     }
 
@@ -364,6 +378,17 @@ public class BookingService {
         booking.setTrangThai("Rejected");
         booking.setGhiChuHuy(ghiChu);
         bookingRepo.save(booking);
+
+        // Gửi thông báo đẩy cho khách hàng
+        try {
+            String title = "Đơn đặt phòng bị từ chối";
+            String content = String.format("Mã đơn %s đã bị từ chối. Lý do: %s", 
+                    booking.getMaDatPhong(), ghiChu);
+            systemNotificationService.createDirectNotification(booking.getNguoiDung().getEmail(), title, content, "SYSTEM");
+        } catch (Exception e) {
+            log.warn("Khong the gui thong bao tu choi cho booking {}: {}", booking.getMaDatPhong(), e.getMessage());
+        }
+
         return toBookingResponse(booking);
     }
 
@@ -435,6 +460,14 @@ public class BookingService {
         booking.setTrangThai("CheckedIn");
         bookingRepo.save(booking);
         log.info("Booking {} checked in.", booking.getMaDatPhong());
+
+        // Gửi thông báo chào mừng
+        try {
+            String title = "Bạn đã Check-in thành công";
+            String content = "Chào mừng bạn đến với " + booking.getPhong().getKhachSan().getTen() + ". Chúc bạn có một kỳ nghỉ tuyệt vời!";
+            systemNotificationService.createDirectNotification(booking.getNguoiDung().getEmail(), title, content, "INFO");
+        } catch (Exception e) { }
+
         return toBookingResponse(booking);
     }
 
@@ -531,9 +564,16 @@ public class BookingService {
         saveLichSu(booking, tongCuoi, "ThanhToan",
                 phuongThuc != null ? phuongThuc : "TienMat",
                 "ThanhCong",
-                "Checkout: Phong " + booking.getGiaPhongGoc() +
+                "Checkout: Phong " + (booking.getGiaPhongGoc() != null ? booking.getGiaPhongGoc() : "0") +
                 " + DV " + tienDV + " + PhuThu " + tienPT,
                 getCurrentUserEmail());
+
+        // Gửi thông báo cảm ơn
+        try {
+            String title = "Bạn đã Check-out thành công";
+            String content = "Cảm ơn bạn đã sử dụng dịch vụ tại " + booking.getPhong().getKhachSan().getTen() + ". Hẹn gặp lại bạn!";
+            systemNotificationService.createDirectNotification(booking.getNguoiDung().getEmail(), title, content, "INFO");
+        } catch (Exception e) { }
 
         log.info("Booking {} checked out. Total: {}", booking.getMaDatPhong(), tongCuoi);
         return toBookingResponse(booking);
@@ -616,7 +656,16 @@ public class BookingService {
         List<PhieuDatPhong> list = bookingRepo.findByNguoiDungIdWithDetails(userId);
         List<Integer> ids = list.stream().map(PhieuDatPhong::getId).collect(Collectors.toList());
         Set<Integer> reviewedIds = ids.isEmpty() ? Set.of() : danhGiaRepo.findPhieuDatPhongIdsWithReview(ids);
-        return list.stream().map(b -> toBookingResponse(b, reviewedIds)).collect(Collectors.toList());
+        java.util.Map<Integer, Integer> starsByBooking = new java.util.HashMap<>();
+        if (!reviewedIds.isEmpty()) {
+            List<Integer> ridList = new java.util.ArrayList<>(reviewedIds);
+            for (Object[] row : danhGiaRepo.findStarsByPhieuDatPhongIds(ridList)) {
+                if (row != null && row.length >= 2 && row[0] != null) {
+                    starsByBooking.put((Integer) row[0], row[1] != null ? (Integer) row[1] : null);
+                }
+            }
+        }
+        return list.stream().map(b -> toBookingResponse(b, reviewedIds, starsByBooking)).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
@@ -891,14 +940,20 @@ public class BookingService {
     }
 
     private BookingDto.BookingResponse toBookingResponse(PhieuDatPhong b) {
-        return toBookingResponse(b, null);
+        return toBookingResponse(b, null, null);
     }
 
     private BookingDto.BookingResponse toBookingResponse(PhieuDatPhong b, Set<Integer> reviewedIds) {
+        return toBookingResponse(b, reviewedIds, null);
+    }
+
+    private BookingDto.BookingResponse toBookingResponse(PhieuDatPhong b, Set<Integer> reviewedIds,
+                                                         java.util.Map<Integer, Integer> starsByBooking) {
         long soNgay = b.getNgayDen() != null && b.getNgayDi() != null
                 ? ChronoUnit.DAYS.between(b.getNgayDen(), b.getNgayDi()) : 0;
         NguoiDung kh = b.getNguoiDung();
         boolean isReviewed = reviewedIds != null ? reviewedIds.contains(b.getId()) : danhGiaRepo.existsByPhieuDatPhongId(b.getId());
+        Integer soSao = (starsByBooking != null && isReviewed) ? starsByBooking.get(b.getId()) : null;
         KhachSan ks = b.getPhong() != null ? b.getPhong().getKhachSan() : null;
         return BookingDto.BookingResponse.builder()
                 .id(b.getId())
@@ -932,6 +987,7 @@ public class BookingService {
                 .ngayDat(b.getNgayDat())
                 .ghiChuKhach(b.getGhiChuKhach())
                 .isReviewed(isReviewed)
+                .soSaoDanhGia(soSao)
                 .build();
     }
     /**
