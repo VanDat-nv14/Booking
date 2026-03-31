@@ -5,6 +5,9 @@ import com.example.bookingkhachsan.repository.DanhGiaRepository;
 import com.example.bookingkhachsan.repository.KhachSanRepository;
 import com.example.bookingkhachsan.repository.NguoiDungRepository;
 import com.example.bookingkhachsan.repository.PhieuDatPhongRepository;
+import com.example.bookingkhachsan.repository.ChiTietSuDungDVRepository;
+import com.example.bookingkhachsan.repository.PhuThuRepository;
+import com.example.bookingkhachsan.dto.BookingDto;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -35,6 +38,8 @@ public class AdminController {
     private final PhieuDatPhongRepository bookingRepository;
     private final DanhGiaRepository danhGiaRepository;
     private final KhachSanRepository khachSanRepository;
+    private final ChiTietSuDungDVRepository ctsdRepository;
+    private final PhuThuRepository phuThuRepository;
 
     // ── Request DTO ──────────────────────────────
     @Data
@@ -69,6 +74,8 @@ public class AdminController {
     public static class RevenueReportResponse {
         private BigDecimal tongDoanhThuToanHeThong;
         private List<RevenueReportItem> doanhThuTheoKhachSan;
+        private List<BookingDto.MonthlyRevenue> monthlyStats;
+        private List<BookingDto.SurchargeDetail> surcharges;
     }
 
     // ── GET all users ────────────────────────────
@@ -85,43 +92,135 @@ public class AdminController {
 
     // ── GET Báo Cáo Doanh Thu ────────────────────
     @GetMapping("/reports/revenue")
-    public ResponseEntity<RevenueReportResponse> getRevenueReport() {
-        List<com.example.bookingkhachsan.entity.PhieuDatPhong> allBookings = bookingRepository.findAll();
-        
+    public ResponseEntity<RevenueReportResponse> getRevenueReport(@RequestParam(required = false) Integer year) {
+        int targetYear = (year != null) ? year : java.time.LocalDate.now().getYear();
+
+        List<com.example.bookingkhachsan.entity.PhieuDatPhong> allBookings = bookingRepository.findAll().stream()
+                .filter(b -> b.getNgayDen() != null && b.getNgayDen().getYear() == targetYear)
+                .filter(b -> "Completed".equals(b.getTrangThai()) || "CheckedOut".equals(b.getTrangThai()))
+                .collect(Collectors.toList());
+
+        List<Integer> bookingIds = allBookings.stream().map(com.example.bookingkhachsan.entity.PhieuDatPhong::getId).collect(Collectors.toList());
+
+        List<com.example.bookingkhachsan.entity.ChiTietSuDungDV> ctsdList = ctsdRepository.findAll().stream()
+                .filter(ct -> ct.getPhieuDatPhong() != null && bookingIds.contains(ct.getPhieuDatPhong().getId()))
+                .collect(Collectors.toList());
+
+        List<com.example.bookingkhachsan.entity.PhuThu> ptList = phuThuRepository.findAll().stream()
+                .filter(pt -> pt.getPhieuDatPhong() != null && bookingIds.contains(pt.getPhieuDatPhong().getId()))
+                .collect(Collectors.toList());
+
+        Map<Integer, BookingDto.MonthlyRevenue> monthlyMap = new HashMap<>();
+        for (int i = 1; i <= 12; i++) {
+            monthlyMap.put(i, BookingDto.MonthlyRevenue.builder()
+                    .month(targetYear + "-" + String.format("%02d", i))
+                    .roomRevenue(BigDecimal.ZERO)
+                    .serviceRevenue(BigDecimal.ZERO)
+                    .surchargeRevenue(BigDecimal.ZERO)
+                    .totalRevenue(BigDecimal.ZERO)
+                    .build());
+        }
+
         BigDecimal globalTotal = BigDecimal.ZERO;
         Map<String, RevenueReportItem> hotelRevenueMap = new HashMap<>();
 
-        for (com.example.bookingkhachsan.entity.PhieuDatPhong booking : allBookings) {
-            // Chi tinh doanh thu cho cac don da CheckedOut hoac Completed
-            if ("CheckedOut".equals(booking.getTrangThai()) || "Completed".equals(booking.getTrangThai())) {
-                BigDecimal thanhTien = booking.getThanhTien() != null ? booking.getThanhTien() : BigDecimal.ZERO;
-                globalTotal = globalTotal.add(thanhTien);
+        for (com.example.bookingkhachsan.entity.PhieuDatPhong b : allBookings) {
+            int month = b.getNgayDen().getMonthValue();
+            BookingDto.MonthlyRevenue mr = monthlyMap.get(month);
 
-                String hotelName = "Unknown";
-                Integer hotelId = null;
-                if (booking.getPhong() != null && booking.getPhong().getKhachSan() != null) {
-                    hotelId = booking.getPhong().getKhachSan().getId();
-                    hotelName = booking.getPhong().getKhachSan().getTen();
-                }
+            long soNgay = (b.getNgayDen() != null && b.getNgayDi() != null)
+                    ? java.time.temporal.ChronoUnit.DAYS.between(b.getNgayDen(), b.getNgayDi()) : 1;
+            if (soNgay < 1) soNgay = 1;
 
-                // Use hotelId as the key if available, otherwise hotelName
-                String key = hotelId != null ? hotelId.toString() : hotelName;
-                RevenueReportItem item = hotelRevenueMap.getOrDefault(key, new RevenueReportItem());
-                if (item.getTenKhachSan() == null) {
-                    item.setKhachSanId(hotelId);
-                    item.setTenKhachSan(hotelName);
-                    item.setTongSoDon(0);
-                    item.setTongDoanhThu(BigDecimal.ZERO);
-                }
-                item.setTongSoDon(item.getTongSoDon() + 1);
-                item.setTongDoanhThu(item.getTongDoanhThu().add(thanhTien));
-                hotelRevenueMap.put(key, item);
+            BigDecimal giaPhongMot = b.getGiaPhongGoc() != null ? b.getGiaPhongGoc() : (b.getThanhTien() != null ? b.getThanhTien() : BigDecimal.ZERO);
+            BigDecimal tienPhong = giaPhongMot.multiply(BigDecimal.valueOf(soNgay));
+
+            mr.setRoomRevenue(mr.getRoomRevenue().add(tienPhong));
+            mr.setTotalRevenue(mr.getTotalRevenue().add(tienPhong));
+            globalTotal = globalTotal.add(tienPhong);
+
+            String hotelName = "Unknown";
+            Integer hotelId = null;
+            if (b.getPhong() != null && b.getPhong().getKhachSan() != null) {
+                hotelId = b.getPhong().getKhachSan().getId();
+                hotelName = b.getPhong().getKhachSan().getTen();
+            }
+
+            String key = hotelId != null ? hotelId.toString() : hotelName;
+            RevenueReportItem item = hotelRevenueMap.getOrDefault(key, new RevenueReportItem());
+            if (item.getTenKhachSan() == null) {
+                item.setKhachSanId(hotelId);
+                item.setTenKhachSan(hotelName);
+                item.setTongSoDon(0);
+                item.setTongDoanhThu(BigDecimal.ZERO);
+            }
+            item.setTongSoDon(item.getTongSoDon() + 1);
+            item.setTongDoanhThu(item.getTongDoanhThu().add(tienPhong));
+            hotelRevenueMap.put(key, item);
+        }
+
+        for (com.example.bookingkhachsan.entity.ChiTietSuDungDV ct : ctsdList) {
+            int month = ct.getPhieuDatPhong().getNgayDen().getMonthValue();
+            BookingDto.MonthlyRevenue mr = monthlyMap.get(month);
+            BigDecimal donGia = ct.getDonGiaLucDat() != null ? ct.getDonGiaLucDat() : BigDecimal.ZERO;
+            int sl = ct.getSoLuong() != null ? ct.getSoLuong() : 0;
+            BigDecimal amt = donGia.multiply(BigDecimal.valueOf(sl));
+
+            mr.setServiceRevenue(mr.getServiceRevenue().add(amt));
+            mr.setTotalRevenue(mr.getTotalRevenue().add(amt));
+            globalTotal = globalTotal.add(amt);
+
+            String hotelName = "Unknown";
+            Integer hotelId = null;
+            if (ct.getPhieuDatPhong().getPhong() != null && ct.getPhieuDatPhong().getPhong().getKhachSan() != null) {
+                hotelId = ct.getPhieuDatPhong().getPhong().getKhachSan().getId();
+                hotelName = ct.getPhieuDatPhong().getPhong().getKhachSan().getTen();
+            }
+            String key = hotelId != null ? hotelId.toString() : hotelName;
+            if (hotelRevenueMap.containsKey(key)) {
+                RevenueReportItem item = hotelRevenueMap.get(key);
+                item.setTongDoanhThu(item.getTongDoanhThu().add(amt));
             }
         }
+
+        List<BookingDto.SurchargeDetail> surchargeDetails = new java.util.ArrayList<>();
+        for (com.example.bookingkhachsan.entity.PhuThu pt : ptList) {
+            int month = pt.getPhieuDatPhong().getNgayDen().getMonthValue();
+            BookingDto.MonthlyRevenue mr = monthlyMap.get(month);
+            BigDecimal amt = pt.getSoTien() != null ? pt.getSoTien() : BigDecimal.ZERO;
+
+            mr.setSurchargeRevenue(mr.getSurchargeRevenue().add(amt));
+            mr.setTotalRevenue(mr.getTotalRevenue().add(amt));
+            globalTotal = globalTotal.add(amt);
+
+            surchargeDetails.add(BookingDto.SurchargeDetail.builder()
+                    .maDatPhong(pt.getPhieuDatPhong().getMaDatPhong() != null ? pt.getPhieuDatPhong().getMaDatPhong() : String.valueOf(pt.getPhieuDatPhong().getId()))
+                    .loaiPhuThu(pt.getLoaiPhuThu())
+                    .soTien(amt)
+                    .ngayThu(pt.getCreatedAt() != null ? pt.getCreatedAt() : java.time.LocalDateTime.now())
+                    .build());
+
+            String hotelName = "Unknown";
+            Integer hotelId = null;
+            if (pt.getPhieuDatPhong().getPhong() != null && pt.getPhieuDatPhong().getPhong().getKhachSan() != null) {
+                hotelId = pt.getPhieuDatPhong().getPhong().getKhachSan().getId();
+                hotelName = pt.getPhieuDatPhong().getPhong().getKhachSan().getTen();
+            }
+            String key = hotelId != null ? hotelId.toString() : hotelName;
+            if (hotelRevenueMap.containsKey(key)) {
+                RevenueReportItem item = hotelRevenueMap.get(key);
+                item.setTongDoanhThu(item.getTongDoanhThu().add(amt));
+            }
+        }
+        
+        // Sort surcharges latest first
+        surchargeDetails.sort((s1, s2) -> s2.getNgayThu().compareTo(s1.getNgayThu()));
 
         RevenueReportResponse response = new RevenueReportResponse();
         response.setTongDoanhThuToanHeThong(globalTotal);
         response.setDoanhThuTheoKhachSan(hotelRevenueMap.values().stream().collect(Collectors.toList()));
+        response.setMonthlyStats(monthlyMap.values().stream().collect(Collectors.toList()));
+        response.setSurcharges(surchargeDetails);
 
         return ResponseEntity.ok(response);
     }

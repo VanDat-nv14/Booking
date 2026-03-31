@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
+import { resolveHotelImageUrl } from '../utils/hotelImages';
+import { IconStar } from '../components/icons/UiIcons';
 
 const avatar = (name) =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=4f46e5&color=fff&bold=true&size=128`;
@@ -318,13 +320,14 @@ const ReviewModal = ({ booking, onClose, onSuccess }) => {
       await axiosClient.post('/reviews', {
         phieuDatPhongId: booking.id,
         khachSanId: booking.khachSanId,
-        nguoiDungId: user.userId,
+        nguoiDungId: Number(user.userId),
         soSaoTong: rating,
         binhLuan: comment.trim()
       });
-      onSuccess();
+      setSubmitting(false);
+      onSuccess(rating);
     } catch (err) {
-      setError(err.response?.data?.message || 'Có lỗi xảy ra khi gửi đánh giá.');
+      setError(err.response?.data?.error || err.response?.data?.message || 'Có lỗi xảy ra khi gửi đánh giá.');
       setSubmitting(false);
     }
   };
@@ -432,7 +435,7 @@ const BookingHistoryPage = () => {
 
     const load = async () => {
       try {
-        const res = await axiosClient.get(`/bookings/user/${userId}`);
+        const res = await axiosClient.get(`/bookings/user/${Number(userId)}`);
         setBookings(res.data || []);
       } catch {
         showToast('Không thể tải lịch sử!', 'error');
@@ -478,9 +481,12 @@ const BookingHistoryPage = () => {
         <ReviewModal
           booking={selectedReviewBooking}
           onClose={() => setSelectedReviewBooking(null)}
-          onSuccess={() => {
-            // Update local state to hide the review button immediately
-            setBookings(prev => prev.map(b => b.id === selectedReviewBooking.id ? { ...b, isReviewed: true } : b));
+          onSuccess={(soSao) => {
+            setBookings(prev => prev.map(b =>
+              b.id === selectedReviewBooking.id
+                ? { ...b, isReviewed: true, soSaoDanhGia: soSao ?? b.soSaoDanhGia }
+                : b
+            ));
             setSelectedReviewBooking(null);
             showToast('Cảm ơn bạn đã đánh giá!', 'success');
           }}
@@ -545,17 +551,26 @@ const BookingHistoryPage = () => {
 };
 
 /* ── Booking Card ─────────────────────────────────── */
-const BookingCard = ({ b, onDetail, muted }) => {
+const BookingCard = ({ b, onDetail, onReview, muted }) => {
   const statusBadge = STATUS_BADGE[b.trangThai] || 'bg-gray-100 text-gray-600';
+  const thumbUrl = resolveHotelImageUrl(b.hinhAnhBia || b.phong?.khachSan?.hinhAnhBia);
   return (
     <div className={`border rounded-2xl p-4 transition-all hover:shadow-md cursor-pointer ${muted ? 'border-gray-100 bg-gray-50/50' : 'border-gray-100 bg-white hover:border-indigo-100'}`}
          onClick={onDetail}>
       <div className="flex items-start gap-4">
         {/* Hotel thumb */}
         <div className="w-16 h-16 rounded-xl overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-100 flex-shrink-0 flex items-center justify-center text-2xl">
-          {(b.hinhAnhBia || b.phong?.khachSan?.hinhAnhBia)
-            ? <img src={(() => { const u = b.hinhAnhBia || b.phong?.khachSan?.hinhAnhBia; return (u?.startsWith('http') || u?.startsWith('data:')) ? u : (import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080') + u; })()} alt="" className="w-full h-full object-cover" />
-            : '🏨'}
+          {thumbUrl ? (
+            <img
+              src={thumbUrl}
+              alt=""
+              className="w-full h-full object-cover object-center"
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            '🏨'
+          )}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -589,9 +604,17 @@ const BookingCard = ({ b, onDetail, muted }) => {
                  </button>
               )}
               {muted && b.isReviewed === true && (
-                 <span className="text-xs px-2 py-1 text-gray-400 font-medium italic">
-                   Đã đánh giá
-                 </span>
+                <span className="inline-flex items-center gap-1 text-xs px-2 py-1 text-amber-700 font-semibold">
+                  <span className="inline-flex items-center gap-0.5" title={`${b.soSaoDanhGia || 0}/5 sao`}>
+                    {Array.from({ length: 5 }, (_, i) => (
+                      <IconStar
+                        key={i}
+                        className={`w-3.5 h-3.5 ${i < (b.soSaoDanhGia || 0) ? 'text-amber-400' : 'text-slate-200'}`}
+                      />
+                    ))}
+                  </span>
+                  <span className="text-gray-500 font-normal italic">Đã đánh giá</span>
+                </span>
               )}
               <button onClick={(e) => { e.stopPropagation(); onDetail(); }}
                 className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 font-semibold rounded-lg hover:bg-indigo-100 transition">

@@ -130,6 +130,8 @@ public class BookingDto {
         private String tenKhachSan;
         private String hinhAnhBia;  // Ảnh bìa khách sạn cho card
         private Boolean isReviewed;
+        /** Số sao đã chấm (1–5), có khi isReviewed = true */
+        private Integer soSaoDanhGia;
 
         // Thong tin nguoi dat
         private Integer nguoiDungId;

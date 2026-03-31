@@ -21,6 +21,7 @@ const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const BookingHistoryPage = lazy(() => import('./pages/BookingHistoryPage'));
 const HotelDetailPage = lazy(() => import('./pages/HotelDetailPage'));
 const HotelMapPage = lazy(() => import('./pages/HotelMapPage'));
+const MyReviewsPage = lazy(() => import('./pages/MyReviewsPage'));
 
 // const HotelDetailPage = Placeholder; // Removed
 // const BookingPage = Placeholder; // Removed – thay bằng trang thanh toán riêng
@@ -28,7 +29,7 @@ const HotelMapPage = lazy(() => import('./pages/HotelMapPage'));
 
 const PageFallback = () => (
   <div className="flex items-center justify-center min-h-[40vh]">
-    <div className="animate-spin rounded-full h-10 w-10 border-2 border-blue-600 border-t-transparent" />
+    <div className="animate-spin rounded-full h-10 w-10 border-2 border-brand-600 border-t-transparent" />
   </div>
 );
 
@@ -36,9 +37,9 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
+        <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50 text-slate-900 font-sans antialiased">
           <Navbar />
-          <main className="container mx-auto px-4 py-6">
+          <main className="w-full">
             <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route path="/" element={<HomePage />} />
@@ -65,6 +66,7 @@ function App() {
                   <Route path="/booking" element={<PaymentPage />} />
                   <Route path="/user/profile" element={<UserProfilePage />} />
                   <Route path="/user/bookings" element={<BookingHistoryPage />} />
+                  <Route path="/user/reviews" element={<MyReviewsPage />} />
               </Route>
 
             </Routes>

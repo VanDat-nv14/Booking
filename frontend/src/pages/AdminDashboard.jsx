@@ -1,10 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
+import * as XLSX from 'xlsx';
 
 // Fix icon lỗi của Leaflet khi dùng với module bundler (Vite/Webpack)
 delete L.Icon.Default.prototype._getIconUrl;
@@ -34,6 +38,11 @@ const MapClickHandler = ({ onLocationSelect }) => {
   });
   return null;
 };
+
+const ADMIN_TAB_IDS = new Set([
+  'dashboard', 'users', 'hotels', 'bookings', 'reports', 'guestReports',
+  'notifications', 'discounts', 'promotions',
+]);
 
 // ── Helpers ────────────────────────────────────
 const ROLES = ['Admin', 'HotelManager', 'User'];
@@ -328,13 +337,22 @@ const AdminDashboard = () => {
   // ── REVENUE REPORT STATE ──
   const [revenueData, setRevenueData] = useState(null);
   const [revenueFilter, setRevenueFilter] = useState('');
+  const [revenueYear, setRevenueYear] = useState(new Date().getFullYear());
   const [loadingRevenue, setLoadingRevenue] = useState(false);
 
   // ── FILTER & SEARCH ──
   const [loading, setLoading] = useState(true);
   const { token, logout, user: currentUser } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('users');
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && ADMIN_TAB_IDS.has(t)) {
+      setActiveTab(t);
+    }
+  }, [searchParams]);
 
   // User management state
   const [searchQ, setSearchQ] = useState('');
@@ -347,7 +365,7 @@ const AdminDashboard = () => {
   const [editingHotel, setEditingHotel] = useState(null);
   const HOTEL_FORM_DEFAULT = {
     ten: '', diaChi: '', soSao: 3, moTa: '',
-    quocGiaId: '', tinhThanhId: '', viTriId: '', viTriName: '',
+    quocGiaId: '', quocGiaName: '', tinhThanhId: '', tinhThanhName: '', viTriId: '', viTriName: '',
     gioNhanPhong: '14:00', gioTraPhong: '12:00',
     hinhAnhBia: '', hinhAnhs: [],
     viDo: null, kinhDo: null, // Tọa độ hiển thị trên bản đồ
@@ -358,6 +376,8 @@ const AdminDashboard = () => {
   const [quocGias, setQuocGias]         = useState([]);
   const [tinhThanhs, setTinhThanhs]     = useState([]);
   const [viTrisInProvince, setViTrisInProvince] = useState([]);
+  const [quocGiaMode, setQuocGiaMode]   = useState('select'); // 'select' | 'create'
+  const [tinhThanhMode, setTinhThanhMode] = useState('select'); // 'select' | 'create'
   const [viTriMode, setViTriMode]       = useState('select'); // 'select' | 'create'
   const [showMapPicker, setShowMapPicker] = useState(false);
   // Luôn hiển thị bản đồ để gắn tọa độ khách sạn
@@ -490,31 +510,156 @@ const AdminDashboard = () => {
     } catch { /* ignore */ }
   };
 
-  const handleQuocGiaChange = (quocGiaId) => {
-    setHotelFormData(f => ({ ...f, quocGiaId, tinhThanhId: '', viTriId: '', viTriName: '' }));
-    setTinhThanhs([]);
-    setViTrisInProvince([]);
-    setViTriMode('select');
-    fetchTinhThanhsForCountry(quocGiaId);
+  const handleQuocGiaChange = (val) => {
+    if (val === 'CREATE_NEW') {
+      setQuocGiaMode('create');
+      setHotelFormData(f => ({ ...f, quocGiaId: '', quocGiaName: '', tinhThanhId: '', tinhThanhName: '', viTriId: '', viTriName: '' }));
+      setTinhThanhs([]);
+      setViTrisInProvince([]);
+      setTinhThanhMode('create');
+      setViTriMode('create');
+    } else {
+      const qId = Number(val) || '';
+      setHotelFormData(f => ({ ...f, quocGiaId: qId, quocGiaName: '', tinhThanhId: '', tinhThanhName: '', viTriId: '', viTriName: '' }));
+      setTinhThanhs([]);
+      setViTrisInProvince([]);
+      setTinhThanhMode('select');
+      setViTriMode('select');
+      fetchTinhThanhsForCountry(qId);
+    }
   };
 
-  const handleTinhThanhChange = (tinhThanhId) => {
-    setHotelFormData(f => ({ ...f, tinhThanhId, viTriId: '', viTriName: '' }));
-    setViTriMode('select');
-    fetchViTrisForProvince(tinhThanhId);
+  const handleTinhThanhChange = (val) => {
+    if (val === 'CREATE_NEW') {
+      setTinhThanhMode('create');
+      setHotelFormData(f => ({ ...f, tinhThanhId: '', tinhThanhName: '', viTriId: '', viTriName: '' }));
+      setViTrisInProvince([]);
+      setViTriMode('create');
+    } else {
+      const tId = Number(val) || '';
+      setHotelFormData(f => ({ ...f, tinhThanhId: tId, tinhThanhName: '', viTriId: '', viTriName: '' }));
+      setViTriMode('select');
+      fetchViTrisForProvince(tId);
+    }
   };
 
   const fetchRevenueReport = useCallback(async () => {
     setLoadingRevenue(true);
     try {
-      const res = await axiosClient.get('/admin/reports/revenue');
+      const res = await axiosClient.get(`/admin/reports/revenue?year=${revenueYear}`);
       setRevenueData(res.data);
     } catch (err) {
       showToast('Lỗi khi tải báo cáo doanh thu', 'error');
     } finally {
       setLoadingRevenue(false);
     }
+  }, [showToast, revenueYear]);
+
+  // ── Guest Reports State ──
+  const [guestReports, setGuestReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [reportFilter, setReportFilter] = useState('');
+  const [reportResponse, setReportResponse] = useState('');
+
+  // ── Notifications State ──
+  const [notifications, setNotifications] = useState([]);
+  const [loadingNotif, setLoadingNotif] = useState(false);
+  const [notifForm, setNotifForm] = useState({ tieuDe: '', noiDung: '', loai: 'INFO', doiTuong: 'ALL', kenhGui: 'APP', lichGui: '' });
+  const [showNotifForm, setShowNotifForm] = useState(false);
+
+  // ── Discounts State ──
+  const [discounts, setDiscounts] = useState([]);
+  const [loadingDisc, setLoadingDisc] = useState(false);
+  const [discForm, setDiscForm] = useState({ code: '', ten: '', loai: 'PERCENT', giaTri: '', giamToiDa: '', donHangToiThieu: '', soLanSuDungToiDa: '', ngayBatDau: '', ngayKetThuc: '', khachSanId: '' });
+  const [showDiscForm, setShowDiscForm] = useState(false);
+  const [editingDisc, setEditingDisc] = useState(null);
+  const [validateCode, setValidateCode] = useState('');
+  const [validateAmount, setValidateAmount] = useState('');
+  const [validateResult, setValidateResult] = useState(null);
+
+  // ── Admin Promotions State ──
+  const [adminPromos, setAdminPromos] = useState([]);
+  const [loadingAdminPromo, setLoadingAdminPromo] = useState(false);
+
+  // ── Fetch functions ──
+  const fetchGuestReports = useCallback(async () => {
+    setLoadingReports(true);
+    try { const r = await axiosClient.get('/guest-reports'); setGuestReports(r.data); }
+    catch { showToast('Không tải được báo cáo khách', 'error'); }
+    finally { setLoadingReports(false); }
   }, [showToast]);
+
+  const fetchNotifications = useCallback(async () => {
+    setLoadingNotif(true);
+    try { const r = await axiosClient.get('/system-notifications'); setNotifications(r.data); }
+    catch { showToast('Không tải được thông báo', 'error'); }
+    finally { setLoadingNotif(false); }
+  }, [showToast]);
+
+  const fetchDiscounts = useCallback(async () => {
+    setLoadingDisc(true);
+    try { const r = await axiosClient.get('/discounts'); setDiscounts(r.data); }
+    catch { showToast('Không tải được giảm giá', 'error'); }
+    finally { setLoadingDisc(false); }
+  }, [showToast]);
+
+  const fetchAdminPromos = useCallback(async () => {
+    setLoadingAdminPromo(true);
+    try {
+      const r = await axiosClient.get('/promotions');
+      setAdminPromos(r.data);
+    } catch {
+      showToast('Không tải được khuyến mãi', 'error');
+    } finally {
+      setLoadingAdminPromo(false);
+    }
+  }, [showToast]);
+
+  // ── EXCEL EXPORT ──
+  const handleExportExcel = () => {
+    if (!revenueData) return;
+    
+    // 1. Sheet Tổng quan & Khách sạn
+    const wbk = XLSX.utils.book_new();
+    
+    const hotelData = revenueData.doanhThuTheoKhachSan?.map(hs => ({
+      'Khách Sạn': hs.tenKhachSan,
+      'Số Đơn Hoàn Tất': hs.tongSoDon,
+      'Doanh Thu (VNĐ)': hs.tongDoanhThu
+    })) || [];
+    hotelData.push({ 'Khách Sạn': 'TỔNG CỘNG HỆ THỐNG', 'Số Đơn Hoàn Tất': '', 'Doanh Thu (VNĐ)': revenueData.tongDoanhThuToanHeThong });
+    
+    const ws1 = XLSX.utils.json_to_sheet(hotelData);
+    XLSX.utils.book_append_sheet(wbk, ws1, "Tổng Quan & Khách Sạn");
+
+    // 2. Sheet Doanh thu theo tháng
+    if (revenueData.monthlyStats?.length > 0) {
+      const monthData = revenueData.monthlyStats.map(m => ({
+        'Tháng': m.month,
+        'Tiền Phòng (VNĐ)': m.roomRevenue,
+        'Tiền Dịch Vụ (VNĐ)': m.serviceRevenue,
+        'Tiền Phụ Thu (VNĐ)': m.surchargeRevenue,
+        'Tổng Cộng (VNĐ)': m.totalRevenue
+      }));
+      const ws2 = XLSX.utils.json_to_sheet(monthData);
+      XLSX.utils.book_append_sheet(wbk, ws2, "Theo Tháng");
+    }
+
+    // 3. Sheet Chi tiết Phụ thu
+    if (revenueData.surcharges?.length > 0) {
+      const surchargeData = revenueData.surcharges.map(s => ({
+        'Mã Phiếu': s.maDatPhong,
+        'Loại Phụ Thu': s.loaiPhuThu,
+        'Số Tiền (VNĐ)': s.soTien,
+        'Ngày Thu': s.ngayThu ? new Date(s.ngayThu).toLocaleString('vi-VN') : ''
+      }));
+      const ws3 = XLSX.utils.json_to_sheet(surchargeData);
+      XLSX.utils.book_append_sheet(wbk, ws3, "Lịch Sử Phụ Thu");
+    }
+
+    XLSX.writeFile(wbk, `Admin_BaoCaoDoanhThu_${revenueYear}.xlsx`);
+  };
 
   useEffect(() => { 
     const silent = (activeTab === 'hotels' && hotels.length > 0)
@@ -530,8 +675,16 @@ const AdminDashboard = () => {
       fetchUsers(silent);
     } else if (activeTab === 'reports') {
       fetchRevenueReport();
+    } else if (activeTab === 'guestReports') {
+      fetchGuestReports();
+    } else if (activeTab === 'notifications') {
+      fetchNotifications();
+    } else if (activeTab === 'discounts') {
+      fetchDiscounts();
+    } else if (activeTab === 'promotions') {
+      fetchAdminPromos();
     }
-  }, [activeTab, fetchBookings, fetchUsers, fetchRevenueReport]);
+  }, [activeTab, fetchBookings, fetchUsers, fetchRevenueReport, fetchGuestReports, fetchNotifications, fetchDiscounts, fetchAdminPromos]);
 
   // Auto-geocode: debounced khi diaChi + quocGiaId + tinhThanhId thay đổi (chỉ khi modal hotel mở)
   useEffect(() => {
@@ -629,6 +782,8 @@ const AdminDashboard = () => {
     setEditingHotel(hotel);
     const ttId  = hotel.viTri?.tinhThanh?.id || '';
     const qgId  = hotel.viTri?.tinhThanh?.quocGia?.id || '';
+    setQuocGiaMode('select');
+    setTinhThanhMode('select');
     setViTriMode('select');
     setShowMapPicker(false);
     setShowMapPickerForCoords(true);
@@ -641,7 +796,9 @@ const AdminDashboard = () => {
       soSao: hotel.soSao,
       moTa: hotel.moTa || '',
       quocGiaId: qgId,
+      quocGiaName: '',
       tinhThanhId: ttId,
+      tinhThanhName: '',
       viTriId: hotel.viTri?.id || '',
       viTriName: '',
       gioNhanPhong: hotel.gioNhanPhong || '14:00',
@@ -814,6 +971,10 @@ const AdminDashboard = () => {
     { id: 'hotels', label: 'Khách Sạn', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
     { id: 'bookings', label: 'Đặt Phòng', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
     { id: 'reports', label: 'Báo Cáo', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+    { id: 'guestReports', label: 'Báo Cáo Khách', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
+    { id: 'notifications', label: 'Thông Báo HT', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
+    { id: 'discounts', label: 'Giảm Giá', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z' },
+    { id: 'promotions', label: 'Khuyến Mãi', icon: 'M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7' },
   ];
 
   return (
@@ -1073,11 +1234,27 @@ const AdminDashboard = () => {
           {/* ── REVENUE REPORT TAB ── */}
           {activeTab === 'reports' && (
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <h2 className="text-2xl font-bold text-gray-800">Báo Cáo Doanh Thu</h2>
-                <button onClick={fetchRevenueReport} className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-lg text-sm font-semibold transition flex items-center gap-2">
-                  🔄 Tải Lại
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <select 
+                    value={revenueYear} 
+                    onChange={e => setRevenueYear(Number(e.target.value))}
+                    className="border border-gray-200 rounded-lg px-4 py-2 text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    {[...Array(5)].map((_, i) => {
+                      const y = new Date().getFullYear() - i;
+                      return <option key={y} value={y}>Năm {y}</option>;
+                    })}
+                  </select>
+                  <button onClick={handleExportExcel} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+                    Xuất Excel
+                  </button>
+                  <button onClick={fetchRevenueReport} className="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+                    🔄 Tải Lại
+                  </button>
+                </div>
               </div>
 
               {loadingRevenue ? (
@@ -1086,62 +1263,110 @@ const AdminDashboard = () => {
                 </div>
               ) : revenueData ? (
                 <div className="space-y-6">
-                  <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
-                    <p className="text-gray-500 text-sm font-medium">Tổng Doanh Thu Toàn Hệ Thống</p>
-                    <p className="text-4xl font-bold mt-2 text-green-600">
-                      {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(revenueData.tongDoanhThuToanHeThong || 0)}
-                    </p>
-                  </div>
-
-                  <div className="bg-white rounded-xl shadow-sm p-6">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-bold text-gray-800">Doanh Thu Theo Khách Sạn</h3>
-                      <select 
-                        value={revenueFilter} 
-                        onChange={(e) => setRevenueFilter(e.target.value)}
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
-                      >
-                        <option value="">Tất cả khách sạn</option>
-                        {revenueData.doanhThuTheoKhachSan?.map((hs, i) => (
-                          <option key={i} value={hs.tenKhachSan}>{hs.tenKhachSan}</option>
-                        ))}
-                      </select>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-1 bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500 flex flex-col justify-center">
+                      <p className="text-gray-500 text-sm font-medium">Tổng Doanh Thu Hệ Thống ({revenueYear})</p>
+                      <p className="text-4xl font-bold mt-2 text-green-600">
+                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(revenueData.tongDoanhThuToanHeThong || 0)}
+                      </p>
                     </div>
 
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="bg-gray-50 border-b border-gray-100">
-                            <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase">Khách sạn</th>
-                            <th className="px-5 py-3 text-center text-xs font-bold text-gray-500 uppercase">Số lượng đơn (Hoàn tất)</th>
-                            <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase">Doanh thu</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {revenueData.doanhThuTheoKhachSan
-                            ?.filter(hs => !revenueFilter || hs.tenKhachSan === revenueFilter)
-                            .map((hs, i) => (
-                            <tr key={i} className="hover:bg-blue-50 transition">
-                              <td className="px-5 py-3 font-semibold text-gray-800">
-                                {hs.khachSanId ? (
-                                  <Link to={`/hotels/${hs.khachSanId}`} className="text-blue-600 hover:text-blue-800 hover:underline">
-                                    {hs.tenKhachSan}
-                                  </Link>
-                                ) : (
-                                  hs.tenKhachSan
-                                )}
-                              </td>
-                              <td className="px-5 py-3 text-center text-gray-600 font-medium">{hs.tongSoDon}</td>
-                              <td className="px-5 py-3 text-right text-green-600 font-bold">
-                                {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(hs.tongDoanhThu || 0)}
-                              </td>
-                            </tr>
+                    <div className="lg:col-span-2 bg-white rounded-xl shadow-sm p-6">
+                      <h3 className="text-sm font-bold text-gray-800 mb-4">Biểu Đồ Doanh Thu Từng Tháng</h3>
+                      <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={revenueData.monthlyStats || []}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="month" tickFormatter={(val) => val.split('-')[1]} tick={{ fontSize: 12 }} />
+                            <YAxis tickFormatter={(val) => (val / 1000000).toFixed(0) + 'M'} tick={{ fontSize: 12 }} />
+                            <Tooltip formatter={(value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)} />
+                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                            <Bar dataKey="roomRevenue" name="Tiền Phòng" stackId="a" fill="#3B82F6" radius={[0, 0, 4, 4]} />
+                            <Bar dataKey="serviceRevenue" name="Dịch Vụ" stackId="a" fill="#F59E0B" />
+                            <Bar dataKey="surchargeRevenue" name="Phụ Thu" stackId="a" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-xl shadow-sm p-6">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-bold text-gray-800">Doanh Thu Theo Khách Sạn</h3>
+                        <select 
+                          value={revenueFilter} 
+                          onChange={(e) => setRevenueFilter(e.target.value)}
+                          className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-400 outline-none"
+                        >
+                          <option value="">Tất cả</option>
+                          {revenueData.doanhThuTheoKhachSan?.map((hs, i) => (
+                            <option key={i} value={hs.tenKhachSan}>{hs.tenKhachSan}</option>
                           ))}
-                          {revenueData.doanhThuTheoKhachSan?.length === 0 && (
-                            <tr><td colSpan={3} className="py-8 text-center text-gray-400">Không có dữ liệu doanh thu</td></tr>
-                          )}
-                        </tbody>
-                      </table>
+                        </select>
+                      </div>
+
+                      <div className="overflow-x-auto max-h-[400px]">
+                        <table className="min-w-full text-sm">
+                          <thead className="sticky top-0 bg-gray-50">
+                            <tr className="border-b border-gray-100">
+                              <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase">Khách sạn</th>
+                              <th className="px-5 py-3 text-center text-xs font-bold text-gray-500 uppercase">Đơn</th>
+                              <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase">Doanh thu</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {revenueData.doanhThuTheoKhachSan
+                              ?.filter(hs => !revenueFilter || hs.tenKhachSan === revenueFilter)
+                              .map((hs, i) => (
+                              <tr key={i} className="hover:bg-blue-50 transition">
+                                <td className="px-5 py-3 font-semibold text-gray-800">
+                                  {hs.khachSanId ? (
+                                    <Link to={`/hotels/${hs.khachSanId}`} className="text-blue-600 hover:text-blue-800 hover:underline">
+                                      {hs.tenKhachSan}
+                                    </Link>
+                                  ) : (
+                                    hs.tenKhachSan
+                                  )}
+                                </td>
+                                <td className="px-5 py-3 text-center text-gray-600 font-medium">{hs.tongSoDon}</td>
+                                <td className="px-5 py-3 text-right text-green-600 font-bold whitespace-nowrap">
+                                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(hs.tongDoanhThu || 0)}
+                                </td>
+                              </tr>
+                            ))}
+                            {revenueData.doanhThuTheoKhachSan?.length === 0 && (
+                              <tr><td colSpan={3} className="py-8 text-center text-gray-400">Không có dữ liệu</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4">Lịch Sử Phụ Thu</h3>
+                      <div className="flex-1 overflow-y-auto max-h-[400px] pr-2 space-y-3">
+                        {revenueData.surcharges && revenueData.surcharges.length > 0 ? (
+                          revenueData.surcharges.map((surcharge, idx) => (
+                            <div key={idx} className="flex justify-between items-center p-3 sm:p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 transition shadow-sm">
+                              <div>
+                                <p className="font-bold text-gray-800">{surcharge.loaiPhuThu}</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Mã phiếu: <span className="font-mono text-gray-700 bg-gray-200 px-1 py-0.5 rounded">{surcharge.maDatPhong}</span>
+                                </p>
+                                <p className="text-xs text-gray-400 mt-0.5">{new Date(surcharge.ngayThu).toLocaleString('vi-VN')}</p>
+                              </div>
+                              <p className="font-black text-red-600 text-right">
+                                +{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(surcharge.soTien || 0)}
+                              </p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-10 text-gray-400">
+                            <p>Chưa có khoản phụ thu nào trong năm {revenueYear}</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1200,35 +1425,79 @@ const AdminDashboard = () => {
 
                   {/* CẤP 1: Quốc Gia */}
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 block mb-1">🌏 Quốc gia *</label>
-                    <select
-                      value={hotelFormData.quocGiaId}
-                      onChange={e => handleQuocGiaChange(Number(e.target.value) || '')}
-                      className="w-full border border-gray-200 bg-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
-                    >
-                      <option value="">-- Chọn quốc gia --</option>
-                      {quocGias.map(qg => (
-                        <option key={qg.id} value={qg.id}>{qg.ten}</option>
-                      ))}
-                    </select>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-gray-600">
+                        🌏 Quốc gia {quocGiaMode === 'create' ? '(mới)' : ''} *
+                      </label>
+                      {quocGiaMode === 'create' && (
+                        <button type="button"
+                          onClick={() => { setQuocGiaMode('select'); setHotelFormData(f => ({ ...f, quocGiaName: '' })); }}
+                          className="text-xs text-blue-600 hover:underline font-medium">
+                          ← Chọn từ danh sách
+                        </button>
+                      )}
+                    </div>
+                    {quocGiaMode === 'select' ? (
+                      <select
+                        value={hotelFormData.quocGiaId}
+                        onChange={e => handleQuocGiaChange(e.target.value)}
+                        className="w-full border border-gray-200 bg-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+                      >
+                        <option value="">-- Chọn quốc gia --</option>
+                        {quocGias.map(qg => (
+                          <option key={qg.id} value={qg.id}>{qg.ten}</option>
+                        ))}
+                        <option value="CREATE_NEW" className="font-semibold text-blue-600">➕ Tự nhập quốc gia mới...</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: Thái Lan, Hàn Quốc..."
+                        value={hotelFormData.quocGiaName}
+                        onChange={e => setHotelFormData(f => ({ ...f, quocGiaName: e.target.value }))}
+                        className="w-full border border-blue-300 bg-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+                        autoFocus
+                      />
+                    )}
                   </div>
 
                   {/* CẤP 2: Tỉnh / Thành phố */}
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 block mb-1">🏙️ Tỉnh / Thành phố *</label>
-                    {!hotelFormData.quocGiaId ? (
-                      <div className="border border-dashed border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50">Chọn quốc gia trước</div>
-                    ) : (
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-gray-600">
+                        🏙️ Tỉnh / Thành phố {tinhThanhMode === 'create' ? '(mới)' : ''} *
+                      </label>
+                      {tinhThanhMode === 'create' && (
+                        <button type="button"
+                          onClick={() => { setTinhThanhMode('select'); setHotelFormData(f => ({ ...f, tinhThanhName: '' })); }}
+                          className="text-xs text-blue-600 hover:underline font-medium">
+                          ← Chọn từ danh sách
+                        </button>
+                      )}
+                    </div>
+                    {!(hotelFormData.quocGiaId || quocGiaMode === 'create') ? (
+                      <div className="border border-dashed border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50">Chọn hoặc nhập quốc gia trước</div>
+                    ) : tinhThanhMode === 'select' ? (
                       <select
                         value={hotelFormData.tinhThanhId}
-                        onChange={e => handleTinhThanhChange(Number(e.target.value) || '')}
+                        onChange={e => handleTinhThanhChange(e.target.value)}
                         className="w-full border border-gray-200 bg-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
                       >
                         <option value="">-- Chọn tỉnh/thành --</option>
                         {tinhThanhs.map(tt => (
                           <option key={tt.id} value={tt.id}>{tt.ten}</option>
                         ))}
+                        <option value="CREATE_NEW" className="font-semibold text-blue-600">➕ Tự nhập tỉnh thành mới...</option>
                       </select>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: Bangkok, Seoul..."
+                        value={hotelFormData.tinhThanhName}
+                        onChange={e => setHotelFormData(f => ({ ...f, tinhThanhName: e.target.value }))}
+                        className="w-full border border-blue-300 bg-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+                        autoFocus
+                      />
                     )}
                   </div>
 
@@ -1236,39 +1505,48 @@ const AdminDashboard = () => {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-semibold text-gray-600">
-                        � Vị trí {viTriMode === 'create' ? '(mới)' : ''} *
+                        📍 Vị trí {viTriMode === 'create' ? '(mới)' : ''} *
                       </label>
-                      {hotelFormData.tinhThanhId && (
+                      {(hotelFormData.tinhThanhId || tinhThanhMode === 'create') && (
                         <div className="flex items-center gap-2">
                           {viTriMode === 'create' && (
-                            <button type="button"
-                              onClick={() => setShowMapPicker(v => !v)}
-                              className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full hover:bg-green-200 font-medium">
-                              {showMapPicker ? '✕ Đóng bản đồ' : '🗺 Chọn trên bản đồ'}
-                            </button>
+                            <>
+                              <button type="button"
+                                onClick={() => setShowMapPicker(v => !v)}
+                                className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full hover:bg-green-200 font-medium">
+                                {showMapPicker ? '✕ Đóng bản đồ' : '🗺 Chọn trên bản đồ'}
+                              </button>
+                              <button type="button"
+                                onClick={() => { setViTriMode('select'); setShowMapPicker(false); setHotelFormData(f => ({ ...f, viTriName: '' })); }}
+                                className="text-xs text-blue-600 hover:underline font-medium">
+                                ← Chọn từ danh sách
+                              </button>
+                            </>
                           )}
-                          <button type="button"
-                            onClick={() => { setViTriMode(m => m === 'select' ? 'create' : 'select'); setShowMapPicker(false); }}
-                            className="text-xs text-blue-600 hover:underline font-medium">
-                            {viTriMode === 'select' ? '＋ Tạo vị trí mới' : '← Chọn có sẵn'}
-                          </button>
                         </div>
                       )}
                     </div>
 
-                    {!hotelFormData.tinhThanhId ? (
-                      <div className="border border-dashed border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50">Chọn tỉnh/thành trước</div>
+                    {!(hotelFormData.tinhThanhId || tinhThanhMode === 'create') ? (
+                      <div className="border border-dashed border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50">Chọn hoặc nhập tỉnh/thành trước</div>
                     ) : viTriMode === 'select' ? (
                       <select
                         value={hotelFormData.viTriId}
-                        onChange={e => setHotelFormData(f => ({ ...f, viTriId: Number(e.target.value) || '', viTriName: '' }))}
+                        onChange={e => {
+                          if (e.target.value === 'CREATE_NEW') {
+                            setViTriMode('create');
+                            setHotelFormData(f => ({ ...f, viTriId: '', viTriName: '' }));
+                          } else {
+                            setHotelFormData(f => ({ ...f, viTriId: Number(e.target.value) || '', viTriName: '' }))
+                          }
+                        }}
                         className="w-full border border-gray-200 bg-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
                       >
                         <option value="">-- Chọn vị trí --</option>
                         {viTrisInProvince.map(vt => (
                           <option key={vt.id} value={vt.id}>{vt.ten}</option>
                         ))}
-                        {viTrisInProvince.length === 0 && <option disabled>Chưa có vị trí → bấm "Tạo vị trí mới"</option>}
+                        <option value="CREATE_NEW" className="font-semibold text-blue-600">➕ Tự nhập vị trí mới...</option>
                       </select>
                     ) : (
                       <div className="space-y-2">
@@ -1853,6 +2131,433 @@ const AdminDashboard = () => {
               </div>
           )}
 
+
+
+      {/* ── GUEST REPORTS TAB ── */}
+      {activeTab === 'guestReports' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-800">⚠️ Báo Cáo Sự Cố Khách Hàng</h2>
+            <button onClick={fetchGuestReports} className="px-3 py-2 bg-gray-200 rounded-lg text-gray-600 hover:bg-gray-300 text-sm">🔄 Tải lại</button>
+          </div>
+          <div className="flex gap-3">
+            {['', 'PENDING', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map(s => (
+              <button key={s} onClick={() => setReportFilter(s)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${reportFilter === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'}`}>
+                {s || 'Tất cả'}
+              </button>
+            ))}
+          </div>
+          {loadingReports ? <div className="py-16 flex justify-center"><div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"/></div> : (
+            <div className="grid grid-cols-1 gap-3">
+              {guestReports.filter(r => !reportFilter || r.trangThai === reportFilter).map(r => (
+                <div key={r.id} className="bg-white rounded-xl shadow-sm p-4 border-l-4 cursor-pointer hover:shadow-md transition"
+                  style={{ borderColor: r.priority === 'HIGH' ? '#ef4444' : r.priority === 'MEDIUM' ? '#f59e0b' : '#10b981' }}
+                  onClick={() => setSelectedReport(r)}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${r.priority === 'HIGH' ? 'bg-red-100 text-red-700' : r.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>{r.priority}</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">{r.trangThai}</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-600">{r.loaiVanDe}</span>
+                      </div>
+                      <p className="font-semibold text-gray-800">{r.id} — {r.hoTen}</p>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {r.bookingCode ? `Mã đặt: ${r.bookingCode}` : r.khachSanTen ? `Khách sạn: ${r.khachSanTen}` : '—'}
+                        {' '}| {r.email || r.sdt}
+                      </p>
+                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{r.moTa}</p>
+                    </div>
+                    <span className="text-xs text-gray-400 whitespace-nowrap ml-4">{r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : ''}</span>
+                  </div>
+                </div>
+              ))}
+              {guestReports.filter(r => !reportFilter || r.trangThai === reportFilter).length === 0 && (
+                <div className="bg-white rounded-xl p-12 text-center text-gray-400">Không có báo cáo nào.</div>
+              )}
+            </div>
+          )}
+          {/* Detail Modal */}
+          {selectedReport && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedReport(null)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-6 py-4 border-b">
+                  <h3 className="font-bold text-gray-800">Chi tiết: {selectedReport.id}</h3>
+                  <button onClick={() => setSelectedReport(null)} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+                </div>
+                <div className="p-6 space-y-3 text-sm">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><span className="text-xs text-gray-400">Khách</span><p className="font-medium">{selectedReport.hoTen}</p></div>
+                    <div><span className="text-xs text-gray-400">Mã đặt / KS</span><p className="font-medium">{selectedReport.bookingCode || '—'}</p></div>
+                    {selectedReport.khachSanTen && (
+                      <div className="col-span-2"><span className="text-xs text-gray-400">Khách sạn</span><p className="font-medium">{selectedReport.khachSanTen}</p></div>
+                    )}
+                    <div><span className="text-xs text-gray-400">Email</span><p>{selectedReport.email || '—'}</p></div>
+                    <div><span className="text-xs text-gray-400">SĐT</span><p>{selectedReport.sdt || '—'}</p></div>
+                    <div><span className="text-xs text-gray-400">Loại vấn đề</span><p>{selectedReport.loaiVanDe}</p></div>
+                    <div><span className="text-xs text-gray-400">Priority</span>
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${selectedReport.priority === 'HIGH' ? 'bg-red-100 text-red-700' : selectedReport.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>{selectedReport.priority}</span>
+                    </div>
+                  </div>
+                  <div><span className="text-xs text-gray-400">Mô tả</span><p className="mt-1 text-gray-700 bg-gray-50 rounded-lg p-3">{selectedReport.moTa}</p></div>
+                  {selectedReport.phanHoi && <div><span className="text-xs text-gray-400">Phản hồi</span><p className="mt-1 text-gray-700 bg-blue-50 rounded-lg p-3">{selectedReport.phanHoi}</p></div>}
+                  <div className="border-t pt-3 space-y-2">
+                    <p className="text-xs font-semibold text-gray-500">Cập nhật trạng thái</p>
+                    <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" defaultValue={selectedReport.trangThai}
+                      onChange={async e => {
+                        await axiosClient.put(`/guest-reports/${selectedReport.id}`, { trangThai: e.target.value });
+                        showToast('Đã cập nhật!'); fetchGuestReports(); setSelectedReport(null);
+                      }}>
+                      {['PENDING','IN_PROGRESS','RESOLVED','CLOSED'].map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <textarea className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" rows={3} placeholder="Ghi phản hồi..."
+                      value={reportResponse} onChange={e => setReportResponse(e.target.value)} />
+                    <button className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition"
+                      onClick={async () => {
+                        await axiosClient.put(`/guest-reports/${selectedReport.id}`, { phanHoi: reportResponse, nguoiXuLy: currentUser?.email });
+                        showToast('Đã gửi phản hồi!'); fetchGuestReports(); setSelectedReport(null); setReportResponse('');
+                      }}>Gửi Phản Hồi</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SYSTEM NOTIFICATIONS TAB ── */}
+      {activeTab === 'notifications' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-800">🔔 Thông Báo Hệ Thống</h2>
+            <button onClick={() => setShowNotifForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">＋ Tạo Thông Báo</button>
+          </div>
+          {/* Pending ALERT banner */}
+          {notifications.filter(n => n.trangThai === 'PENDING_CONFIRM').length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <p className="font-semibold text-red-700 mb-2">⚠️ {notifications.filter(n => n.trangThai === 'PENDING_CONFIRM').length} thông báo ALERT cần xác nhận lần 2:</p>
+              {notifications.filter(n => n.trangThai === 'PENDING_CONFIRM').map(n => (
+                <div key={n.id} className="flex items-center justify-between bg-white rounded-lg px-4 py-2 mt-2 border border-red-100">
+                  <span className="text-sm font-medium text-gray-700">{n.tieuDe}</span>
+                  <button onClick={async () => {
+                    try { await axiosClient.put(`/system-notifications/${n.id}/confirm-alert`); showToast('Đã xác nhận gửi ALERT!'); fetchNotifications(); }
+                    catch(e) { showToast(e.response?.data?.message || 'Lỗi xác nhận', 'error'); }
+                  }} className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700">Xác Nhận Gửi</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {loadingNotif ? <div className="py-12 flex justify-center"><div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"/></div> : (
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <tr>{['ID','Tiêu Đề','Loại','Đối Tượng','Trạng Thái','Ngày Tạo','Hành Động'].map(h=><th key={h} className="px-4 py-3 text-left font-semibold">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {notifications.map(n => (
+                    <tr key={n.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-mono text-xs text-gray-500">{n.id}</td>
+                      <td className="px-4 py-3 font-medium text-gray-800 max-w-[200px] truncate">{n.tieuDe}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${n.loai==='ALERT'?'bg-red-100 text-red-700':n.loai==='SYSTEM'?'bg-purple-100 text-purple-700':n.loai==='POLICY'?'bg-orange-100 text-orange-700':'bg-blue-100 text-blue-700'}`}>{n.loai}</span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{n.doiTuong}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${n.trangThai==='SENT'?'bg-green-100 text-green-700':n.trangThai==='PENDING_CONFIRM'?'bg-red-100 text-red-700':n.trangThai==='SCHEDULED'?'bg-yellow-100 text-yellow-700':'bg-gray-100 text-gray-600'}`}>{n.trangThai}</span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">{n.createdAt ? new Date(n.createdAt).toLocaleDateString('vi-VN') : ''}</td>
+                      <td className="px-4 py-3">
+                        {!['SENT','CANCELLED'].includes(n.trangThai) && (
+                          <button onClick={async () => { await axiosClient.put(`/system-notifications/${n.id}/cancel`); showToast('Đã hủy!'); fetchNotifications(); }}
+                            className="px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100">Hủy</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {notifications.length === 0 && <div className="py-12 text-center text-gray-400">Chưa có thông báo nào.</div>}
+            </div>
+          )}
+          {/* Create Modal */}
+          {showNotifForm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowNotifForm(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-6 py-4 border-b">
+                  <h3 className="font-bold text-gray-800">🔔 Tạo Thông Báo Mới</h3>
+                  <button onClick={() => setShowNotifForm(false)} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Tiêu đề *</label>
+                    <input value={notifForm.tieuDe} onChange={e => setNotifForm(f=>({...f,tieuDe:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none" placeholder="Tiêu đề thông báo..." />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Nội dung *</label>
+                    <textarea value={notifForm.noiDung} onChange={e => setNotifForm(f=>({...f,noiDung:e.target.value}))} rows={4} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none" placeholder="Nội dung chi tiết..."/>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Loại</label>
+                      <select value={notifForm.loai} onChange={e => setNotifForm(f=>({...f,loai:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+                        {['INFO','SYSTEM','POLICY','ALERT'].map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Đối tượng</label>
+                      <select value={notifForm.doiTuong} onChange={e => setNotifForm(f=>({...f,doiTuong:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+                        {['ALL', 'Admin', 'HotelManager', 'User'].map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Lên lịch gửi (để trống = gửi ngay)</label>
+                    <input type="datetime-local" value={notifForm.lichGui} onChange={e => setNotifForm(f=>({...f,lichGui:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"/>
+                  </div>
+                  {notifForm.loai === 'ALERT' && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">⚠️ Loại ALERT yêu cầu xác nhận lần 2 từ một Admin khác trước khi gửi.</div>}
+                  <div className="flex justify-end gap-3 pt-2 border-t">
+                    <button onClick={() => setShowNotifForm(false)} className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50">Hủy</button>
+                    <button onClick={async () => {
+                      try {
+                        await axiosClient.post('/system-notifications', { ...notifForm, lichGui: notifForm.lichGui || null });
+                        showToast('Tạo thông báo thành công!'); setShowNotifForm(false); setNotifForm({ tieuDe:'',noiDung:'',loai:'INFO',doiTuong:'ALL',kenhGui:'APP',lichGui:'' }); fetchNotifications();
+                      } catch(e) { showToast(e.response?.data?.message || 'Lỗi tạo thông báo','error'); }
+                    }} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">Tạo Thông Báo</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'discounts' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-800">Quản Lý Mã Giảm Giá</h2>
+            <button onClick={() => { setEditingDisc(null); setShowDiscForm(true); setDiscForm({ code:'',ten:'',loai:'PERCENT',giaTri:'',giamToiDa:'',donHangToiThieu:'',soLanSuDungToiDa:'',ngayBatDau:'',ngayKetThuc:'',khachSanId:'' }); }}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">+ Tạo Mã Giảm Giá</button>
+          </div>
+
+          {/* Validate tool */}
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">Kiểm tra mã giảm giá</p>
+            <div className="flex gap-3 flex-wrap">
+              <input value={validateCode} onChange={e => setValidateCode(e.target.value)} placeholder="Nhập mã coupon..." className="flex-1 min-w-[160px] border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"/>
+              <input value={validateAmount} onChange={e => setValidateAmount(e.target.value)} placeholder="Số tiền đơn hàng (VNĐ)" type="number" className="flex-1 min-w-[160px] border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"/>
+              <button onClick={async () => {
+                try { const r = await axiosClient.post('/discounts/validate', { code: validateCode, orderAmount: parseFloat(validateAmount)||0 }); setValidateResult(r.data); }
+                catch { showToast('Lỗi kiểm tra mã','error'); }
+              }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">Kiểm tra</button>
+            </div>
+            {validateResult && (
+              <div className={`mt-3 p-3 rounded-lg text-sm ${validateResult.valid ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                {validateResult.valid ? `Hợp lệ! Giảm: ${new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(validateResult.discountAmount)}` : validateResult.message}
+              </div>
+            )}
+          </div>
+
+          {loadingDisc ? <div className="py-12 flex justify-center"><div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"/></div> : (
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <tr>{['Mã Code','Tên','Loại','Giá Trị','G.Tối Đa','Tối Thiểu','Đã Dùng','Hiệu Lực','Trạng Thái','Hành Động'].map(h=><th key={h} className="px-3 py-3 text-left font-semibold">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {discounts.map(d => (
+                    <tr key={d.id} className="hover:bg-gray-50 transition">
+                      <td className="px-3 py-3 font-mono font-bold text-gray-800 text-xs">{d.code}</td>
+                      <td className="px-3 py-3 text-gray-700 max-w-[120px] truncate" title={d.ten}>{d.ten}</td>
+                      <td className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-bold ${d.loai==='PERCENT'?'bg-blue-100 text-blue-700':'bg-purple-100 text-purple-700'}`}>{d.loai}</span></td>
+                      <td className="px-3 py-3 font-semibold text-gray-800">{d.loai==='PERCENT'?`${d.giaTri}%`:new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(d.giaTri)}</td>
+                      <td className="px-3 py-3 text-gray-500 text-xs">{d.giamToiDa ? new Intl.NumberFormat('vi-VN').format(d.giamToiDa) : '—'}</td>
+                      <td className="px-3 py-3 text-gray-500 text-xs">{d.donHangToiThieu ? new Intl.NumberFormat('vi-VN').format(d.donHangToiThieu) : '—'}</td>
+                      <td className="px-3 py-3 text-gray-600 text-center">{d.soLanDaDung}{d.soLanSuDungToiDa?`/${d.soLanSuDungToiDa}`:''}</td>
+                      <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{d.ngayBatDau} → {d.ngayKetThuc}</td>
+                      <td className="px-3 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${d.trangThai==='ACTIVE'?'bg-green-100 text-green-700':d.trangThai==='EXPIRED'?'bg-gray-100 text-gray-500':'bg-red-100 text-red-600'}`}>{d.trangThai}</span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {/* Edit */}
+                          <button onClick={() => {
+                            setEditingDisc(d);
+                            setDiscForm({ code: d.code, ten: d.ten, loai: d.loai, giaTri: d.giaTri, giamToiDa: d.giamToiDa||'', donHangToiThieu: d.donHangToiThieu||'', soLanSuDungToiDa: d.soLanSuDungToiDa||'', ngayBatDau: d.ngayBatDau, ngayKetThuc: d.ngayKetThuc, khachSanId: d.khachSanId||'' });
+                            setShowDiscForm(true);
+                          }} className="px-2 py-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded hover:bg-blue-100 transition">Sửa</button>
+                          {/* Toggle active/inactive */}
+                          {d.trangThai === 'ACTIVE' && (
+                            <button onClick={async () => { await axiosClient.put(`/discounts/${d.id}`,{trangThai:'INACTIVE'}); showToast('Vô hiệu!'); fetchDiscounts(); }}
+                              className="px-2 py-1 text-xs bg-amber-50 text-amber-600 border border-amber-200 rounded hover:bg-amber-100 transition">Tắt</button>
+                          )}
+                          {d.trangThai === 'INACTIVE' && (
+                            <button onClick={async () => { await axiosClient.put(`/discounts/${d.id}`,{trangThai:'ACTIVE'}); showToast('Kích hoạt!'); fetchDiscounts(); }}
+                              className="px-2 py-1 text-xs bg-green-50 text-green-600 border border-green-200 rounded hover:bg-green-100 transition">Bật</button>
+                          )}
+                          {/* Delete */}
+                          <button onClick={async () => {
+                            if(!window.confirm(`Xóa mã "${d.code}"?`)) return;
+                            try { await axiosClient.delete(`/discounts/${d.id}`); showToast('Xóa thành công!'); fetchDiscounts(); }
+                            catch(e) { showToast(e.response?.data?.message||'Xóa thất bại','error'); }
+                          }} className="px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 transition">Xóa</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {discounts.length === 0 && <div className="py-12 text-center text-gray-400">Chưa có mã giảm giá nào.</div>}
+            </div>
+          )}
+
+          {/* Create/Edit Discount Modal */}
+          {showDiscForm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDiscForm(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-6 py-4 border-b">
+                  <h3 className="font-bold text-gray-800">{editingDisc ? 'Chỉnh Sửa Mã Giảm Giá' : 'Tạo Mã Giảm Giá'}</h3>
+                  <button onClick={() => setShowDiscForm(false)} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Mã coupon *</label>
+                      <input value={discForm.code} onChange={e=>setDiscForm(f=>({...f,code:e.target.value.toUpperCase()}))} disabled={!!editingDisc} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50" placeholder="VD: SUMMER20"/></div>
+                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Tên *</label>
+                      <input value={discForm.ten} onChange={e=>setDiscForm(f=>({...f,ten:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="Tên mã giảm giá"/></div>
+                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Loại</label>
+                      <select value={discForm.loai} onChange={e=>setDiscForm(f=>({...f,loai:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+                        <option value="PERCENT">PERCENT (%)</option><option value="FIXED">FIXED (số tiền)</option>
+                      </select></div>
+                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Giá trị * {discForm.loai==='PERCENT'?'(% tối đa 80)':'(VNĐ)'}</label>
+                      <input type="number" value={discForm.giaTri} onChange={e=>setDiscForm(f=>({...f,giaTri:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder={discForm.loai==='PERCENT'?'20':'100000'}/></div>
+                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Giảm tối đa (VNĐ)</label>
+                      <input type="number" value={discForm.giamToiDa} onChange={e=>setDiscForm(f=>({...f,giamToiDa:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="500000"/></div>
+                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Đơn hàng tối thiểu</label>
+                      <input type="number" value={discForm.donHangToiThieu} onChange={e=>setDiscForm(f=>({...f,donHangToiThieu:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="1000000"/></div>
+                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Số lượt dùng</label>
+                      <input type="number" value={discForm.soLanSuDungToiDa} onChange={e=>setDiscForm(f=>({...f,soLanSuDungToiDa:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="Để trống = không giới hạn"/></div>
+                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Khách sạn ID (trống=toàn HT)</label>
+                      <input type="number" value={discForm.khachSanId} onChange={e=>setDiscForm(f=>({...f,khachSanId:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"/></div>
+                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu *</label>
+                      <input type="date" value={discForm.ngayBatDau} onChange={e=>setDiscForm(f=>({...f,ngayBatDau:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"/></div>
+                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Ngày kết thúc *</label>
+                      <input type="date" value={discForm.ngayKetThuc} onChange={e=>setDiscForm(f=>({...f,ngayKetThuc:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"/></div>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2 border-t">
+                    <button onClick={() => setShowDiscForm(false)} className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50">Hủy</button>
+                    <button onClick={async () => {
+                      try {
+                        const payload = { ...discForm, giaTri: parseFloat(discForm.giaTri), giamToiDa: discForm.giamToiDa?parseFloat(discForm.giamToiDa):null, donHangToiThieu: discForm.donHangToiThieu?parseFloat(discForm.donHangToiThieu):null, soLanSuDungToiDa: discForm.soLanSuDungToiDa?parseInt(discForm.soLanSuDungToiDa):null, khachSanId: discForm.khachSanId?parseInt(discForm.khachSanId):null };
+                        if (editingDisc) {
+                          await axiosClient.put(`/discounts/${editingDisc.id}`, payload);
+                          showToast('Cập nhật mã giảm giá thành công!');
+                        } else {
+                          await axiosClient.post('/discounts', payload);
+                          showToast('Tạo mã giảm giá thành công!');
+                        }
+                        setShowDiscForm(false); fetchDiscounts();
+                        setDiscForm({ code:'',ten:'',loai:'PERCENT',giaTri:'',giamToiDa:'',donHangToiThieu:'',soLanSuDungToiDa:'',ngayBatDau:'',ngayKetThuc:'',khachSanId:'' });
+                      } catch(e) { showToast(e.response?.data?.message || 'Lỗi lưu mã giảm giá','error'); }
+                    }} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">{editingDisc ? 'Cập Nhật' : 'Tạo Mã'}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── PROMOTIONS TAB (Admin) ── */}
+      {activeTab === 'promotions' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800">Quản Lý Khuyến Mãi</h2>
+              <p className="text-sm text-gray-500 mt-1">Duyệt, từ chối và quản lý tất cả chương trình khuyến mãi từ Manager</p>
+            </div>
+            <button onClick={fetchAdminPromos} className="flex items-center gap-2 border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              Làm mới
+            </button>
+          </div>
+
+          {/* Status filter tabs */}
+          <div className="flex gap-2 flex-wrap">
+            {['Tất cả', 'DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'REJECTED'].map(s => (
+              <button key={s} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">{s}</button>
+            ))}
+          </div>
+
+          {loadingAdminPromo ? (
+            <div className="py-12 flex justify-center"><div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"/></div>
+          ) : (
+            <div className="space-y-3">
+              {adminPromos.length === 0 ? (
+                <div className="bg-white rounded-xl p-12 text-center text-gray-400">
+                  <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" /></svg>
+                  <p className="font-medium">Chưa có khuyến mãi nào.</p>
+                </div>
+              ) : adminPromos.map(p => (
+                <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <span className="font-mono text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{p.id}</span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          p.trangThai==='ACTIVE'?'bg-emerald-100 text-emerald-700':
+                          p.trangThai==='APPROVED'?'bg-green-100 text-green-700':
+                          p.trangThai==='PENDING_APPROVAL'?'bg-yellow-100 text-yellow-800':
+                          p.trangThai==='REJECTED'?'bg-red-100 text-red-700':'bg-gray-100 text-gray-600'}`}>{p.trangThai}</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">{p.loai}</span>
+                        {p.khachSanId && <span className="text-xs text-gray-500">KS #{p.khachSanId}</span>}
+                      </div>
+                      <p className="font-semibold text-gray-800 text-lg">{p.ten}</p>
+                      {p.moTa && <p className="text-sm text-gray-500 mt-0.5">{p.moTa}</p>}
+                      <div className="flex gap-4 mt-2 text-xs text-gray-500 flex-wrap">
+                      {p.tiLeGiam && <span>Giảm: <strong className="text-gray-700">{p.tiLeGiam}%</strong></span>}
+                        {p.nganSach && <span>Ngân sách: <strong className="text-gray-700">{new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(p.nganSach)}</strong></span>}
+                        <span>{p.ngayBatDau} → {p.ngayKetThuc}</span>
+                      </div>
+                      {p.ghiChu && <p className="mt-2 text-xs text-blue-600 bg-blue-50 rounded p-2">Ghi chú Manager: {p.ghiChu}</p>}
+                      {p.lyDoTuChoi && <p className="mt-2 text-xs text-red-600 bg-red-50 rounded p-2">Lý do từ chối: {p.lyDoTuChoi}</p>}
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+                      {p.trangThai === 'PENDING_APPROVAL' && (
+                        <>
+                          <button onClick={async () => {
+                            try { await axiosClient.put(`/promotions/${p.id}/review`, { approved: true }); showToast('Duyệt thành công!'); fetchAdminPromos(); }
+                            catch(e) { showToast(e.response?.data?.message||'Lỗi duyệt','error'); }
+                          }} className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700">Duyệt</button>
+                          <button onClick={async () => {
+                            const ly_do = prompt('Lý do từ chối:');
+                            if (ly_do === null) return;
+                            try { await axiosClient.put(`/promotions/${p.id}/review`, { approved: false, lyDoTuChoi: ly_do }); showToast('Từ chối thành công!'); fetchAdminPromos(); }
+                            catch(e) { showToast(e.response?.data?.message||'Lỗi từ chối','error'); }
+                          }} className="px-4 py-2 border border-red-200 text-red-600 text-sm font-semibold rounded-lg hover:bg-red-50">Từ Chối</button>
+                        </>
+                      )}
+                      {p.trangThai === 'APPROVED' && (
+                        <button onClick={async () => {
+                          try { await axiosClient.put(`/promotions/${p.id}/cancel`); showToast('Hủy khuyến mãi thành công!'); fetchAdminPromos(); }
+                          catch(e) { showToast(e.response?.data?.message||'Lỗi hủy','error'); }
+                        }} className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700">Hủy</button>
+                      )}
+                      {p.trangThai === 'ACTIVE' && (
+                        <button onClick={async () => {
+                          try { await axiosClient.put(`/promotions/${p.id}/cancel`); showToast('Tắt thành công!'); fetchAdminPromos(); }
+                          catch(e) { showToast(e.response?.data?.message||'Lỗi','error'); }
+                        }} className="px-3 py-2 border border-amber-200 text-amber-700 text-sm rounded-lg hover:bg-amber-50">Tắt</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <Toast msg={toast?.msg} type={toast?.type} />
     </div>

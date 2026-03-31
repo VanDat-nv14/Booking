@@ -22,20 +22,22 @@ const ICONS = {
     profile: "M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z",
     room: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
     service: "M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+    star: "M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.175 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.382-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z",
+    promotion: "M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7",
 };
 
 // --- Status Badge ---
 const StatusBadge = ({ status }) => {
     const map = {
-        'Pending':    { bg: 'bg-yellow-100', text: 'text-yellow-800', label: '⏳ Chờ xác nhận' },
-        'Confirmed':  { bg: 'bg-blue-100',   text: 'text-blue-800',   label: '✅ Đã xác nhận'  },
-        'CheckedIn':  { bg: 'bg-green-100',  text: 'text-green-800',  label: '🏠 Đang lưu trú' },
-        'CheckedOut': { bg: 'bg-indigo-100', text: 'text-indigo-700', label: '💳 Đã thanh toán' },
-        'Completed':  { bg: 'bg-emerald-100',text: 'text-emerald-700',label: '🎉 Hoàn thành'   },
-        'Cancelled':  { bg: 'bg-red-100',    text: 'text-red-700',    label: '❌ Đã hủy'       },
-        'Rejected':   { bg: 'bg-red-100',    text: 'text-red-700',    label: '🚫 Từ chối'      },
-        'Expired':    { bg: 'bg-gray-100',   text: 'text-gray-500',   label: '⌛ Hết hạn'      },
-        'NoShow':     { bg: 'bg-orange-100', text: 'text-orange-700', label: '👻 Không đến'    },
+        'Pending':    { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Chờ xác nhận' },
+        'Confirmed':  { bg: 'bg-blue-100',   text: 'text-blue-800',   label: 'Đã xác nhận'  },
+        'CheckedIn':  { bg: 'bg-green-100',  text: 'text-green-800',  label: 'Đang lưu trú' },
+        'CheckedOut': { bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'Đã thanh toán' },
+        'Completed':  { bg: 'bg-emerald-100',text: 'text-emerald-700',label: 'Hoàn thành'   },
+        'Cancelled':  { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Đã hủy'       },
+        'Rejected':   { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Từ chối'      },
+        'Expired':    { bg: 'bg-gray-100',   text: 'text-gray-500',   label: 'Hết hạn'      },
+        'NoShow':     { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Không đến'    },
     };
     const s = map[status] || { bg: 'bg-gray-100', text: 'text-gray-600', label: status };
     return (
@@ -152,6 +154,10 @@ const ManagerDashboard = () => {
     const [rooms, setRooms] = useState([]);
     const [services, setServices] = useState([]);
     const [roomTypes, setRoomTypes] = useState([]);
+    const [hotelReviews, setHotelReviews] = useState([]);
+    const [loadingReviews, setLoadingReviews] = useState(false);
+    const [replyText, setReplyText] = useState({});
+    const [isReplying, setIsReplying] = useState(null);
 
     // Modals
     const [showRoomModal, setShowRoomModal] = useState(false);
@@ -191,6 +197,13 @@ const ManagerDashboard = () => {
     const [revenueYear, setRevenueYear] = useState(new Date().getFullYear());
     const [loadingRevenue, setLoadingRevenue] = useState(false);
 
+    // Promotions state
+    const [promotions, setPromotions] = useState([]);
+    const [loadingPromo, setLoadingPromo] = useState(false);
+    const [promoForm, setPromoForm] = useState({ ten: '', moTa: '', loai: 'SEASONAL', tiLeGiam: '', nganSach: '', ngayBatDau: '', ngayKetThuc: '', soLuongX: '', soLuongY: '', ghiChu: '' });
+    const [showPromoForm, setShowPromoForm] = useState(false);
+    const [editingPromo, setEditingPromo] = useState(null);
+
     // Fetch assigned hotel logic
     useEffect(() => {
         fetchMyHotel();
@@ -213,6 +226,44 @@ const ManagerDashboard = () => {
         } catch (err) { }
     };
 
+    const fetchHotelReviews = async (silent = false) => {
+        if (!myHotel) return;
+        if (!silent) setLoadingReviews(true);
+        try {
+            const res = await axiosClient.get(`/reviews/manager/hotel/${myHotel.id}`);
+            setHotelReviews(res.data || []);
+        } catch (err) {
+            console.error('Lỗi tải đánh giá:', err);
+        } finally {
+            if (!silent) setLoadingReviews(false);
+        }
+    };
+
+    const handleReplySubmit = async (reviewId) => {
+        const text = replyText[reviewId];
+        if (!text || !text.trim()) return;
+        setIsReplying(reviewId);
+        try {
+            await axiosClient.put(`/reviews/${reviewId}/reply`, { phanHoi: text });
+            showToast('Đã gửi phản hồi thành công!');
+            setReplyText(prev => ({ ...prev, [reviewId]: '' }));
+            fetchHotelReviews(true);
+        } catch (err) {
+            showToast('Lỗi gửi phản hồi', 'error');
+        } finally {
+            setIsReplying(null);
+        }
+    };
+
+    /* Luôn tải phòng + dịch vụ khi đã có khách sạn — không gắn vào tab.
+       Trước đây chỉ fetch khi vào tab Phòng/Dịch vụ → lần đầu vào Đặt phòng, services/rooms rỗng,
+       chi tiết đặt phòng / thanh toán / thêm dịch vụ dễ lỗi hoặc thiếu dữ liệu cho đến khi đổi tab. */
+    useEffect(() => {
+        if (!myHotel) return;
+        fetchRooms(true);
+        fetchServices(true);
+    }, [myHotel]);
+
     useEffect(() => {
         if (!myHotel) return;
         const silentBookings = (activeTab === 'bookings' || activeTab === 'overview') && bookings.length > 0;
@@ -222,7 +273,16 @@ const ManagerDashboard = () => {
         if (activeTab === 'rooms') fetchRooms(silentRooms);
         if (activeTab === 'services') fetchServices(silentServices);
         if (activeTab === 'revenue') fetchRevenue();
+        if (activeTab === 'reviews') fetchHotelReviews();
+        if (activeTab === 'promotions') fetchPromotions();
     }, [activeTab, myHotel, revenueYear]);
+
+    const fetchPromotions = async () => {
+        setLoadingPromo(true);
+        try { const r = await axiosClient.get('/promotions'); setPromotions(r.data); }
+        catch(e) { console.error('Lỗi tải KM:', e); }
+        finally { setLoadingPromo(false); }
+    };
 
     const fetchRevenue = async () => {
         if (!myHotel) return;
@@ -373,14 +433,25 @@ const ManagerDashboard = () => {
         try {
             const res = await axiosClient.get(`/bookings/id/${id}`);
             setSelectedBooking(res.data);
-            setServiceToAdd({ dichVuId: services[0]?.id || '', soLuong: 1 });
+            setServiceToAdd({
+                dichVuId: services[0]?.id != null ? String(services[0].id) : '',
+                soLuong: 1,
+            });
             setSurchargeToAdd({ loaiPhuThu: '', soTien: '' });
-            // Also load invoice
             fetchInvoice(id);
         } catch (err) {
             showToast('Lỗi tải chi tiết đặt phòng', 'error');
         }
     };
+
+    /* Khi danh sách dịch vụ về sau (lần đầu mở chi tiết), gán option mặc định nếu còn trống */
+    useEffect(() => {
+        if (!selectedBooking || services.length === 0) return;
+        setServiceToAdd((prev) => {
+            if (prev.dichVuId) return prev;
+            return { dichVuId: String(services[0].id), soLuong: prev.soLuong || 1 };
+        });
+    }, [selectedBooking?.id, services]);
 
     const fetchInvoice = async (id) => {
         setInvoiceLoading(true);
@@ -484,22 +555,23 @@ const ManagerDashboard = () => {
         return new Date(dateStr).toLocaleDateString('vi-VN');
     };
 
-    // ---- SIDEBAR NAVIGATION ----
     const navItems = [
-        { id: 'overview',  label: 'Tổng Quan',   icon: ICONS.hotel },
-        { id: 'bookings',  label: 'Đặt Phòng',   icon: ICONS.booking },
-        { id: 'rooms',     label: 'Phòng',        icon: ICONS.room },
-        { id: 'services',  label: 'Dịch Vụ',    icon: ICONS.service },
-        { id: 'revenue',   label: 'Doanh Thu',   icon: ICONS.revenue },
-        { id: 'settings',  label: 'Cài Đặt KS',  icon: ICONS.menu },
-        { id: 'profile',   label: 'Hồ Sơ',      icon: ICONS.profile },
+        { id: 'overview',    label: 'Tổng Quan',    icon: ICONS.hotel },
+        { id: 'bookings',    label: 'Đặt Phòng',    icon: ICONS.booking },
+        { id: 'rooms',       label: 'Phòng',         icon: ICONS.room },
+        { id: 'services',    label: 'Dịch Vụ',      icon: ICONS.service },
+        { id: 'promotions',  label: 'Khuyến Mãi',   icon: ICONS.promotion },
+        { id: 'reviews',     label: 'Đánh Giá',     icon: ICONS.star },
+        { id: 'revenue',     label: 'Doanh Thu',    icon: ICONS.revenue },
+        { id: 'settings',    label: 'Cài Đặt KS',   icon: ICONS.menu },
+        { id: 'profile',     label: 'Hồ Sơ',        icon: ICONS.profile },
     ];
 
     return (
         <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
 
             {/* ---- SIDEBAR ---- */}
-            <aside className={`${sidebarOpen ? 'w-64' : 'w-16'} bg-gradient-to-b from-emerald-800 to-emerald-900 text-white flex flex-col transition-all duration-300 shadow-xl z-20`}>
+            <aside className={`${sidebarOpen ? 'w-64' : 'w-16'} bg-gradient-to-b from-emerald-800 to-emerald-900 text-white flex flex-col min-h-0 transition-all duration-300 shadow-xl z-20`}>
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-emerald-700">
                     {sidebarOpen && (
@@ -536,8 +608,8 @@ const ManagerDashboard = () => {
                     </div>
                 )}
 
-                {/* Nav */}
-                <nav className="flex-1 px-2 py-4 space-y-1">
+                {/* Nav — cuộn để luôn thấy Khuyến Mãi, Doanh Thu, ... */}
+                <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-4 space-y-1">
                     {navItems.map(item => (
                         <button
                             key={item.id}
@@ -737,39 +809,44 @@ const ManagerDashboard = () => {
                                                         <td className="px-4 py-3 flex flex-wrap items-center gap-2">
                                                             {b.trangThai === 'Pending' && (
                                                                 <>
-                                                                    <button onClick={() => handleBookingAction('confirm', b.id)} disabled={!!actionLoading} className="bg-blue-600 text-white hover:bg-blue-700 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition">
+                                                                    <button type="button" onClick={() => handleBookingAction('confirm', b.id)} disabled={!!actionLoading} className="bg-blue-600 text-white hover:bg-blue-700 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition">
                                                                         Xác nhận
                                                                     </button>
-                                                                    <button onClick={() => handleBookingAction('reject', b.id)} disabled={!!actionLoading} className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition hidden sm:block">
+                                                                    <button type="button" onClick={() => handleBookingAction('reject', b.id)} disabled={!!actionLoading} className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition hidden sm:block">
                                                                         Từ chối
                                                                     </button>
                                                                 </>
                                                             )}
                                                             {b.trangThai === 'Confirmed' && (
                                                                 <>
-                                                                    <button onClick={() => handleBookingAction('checkin', b.id)} disabled={!!actionLoading} className="bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition flex items-center gap-1">
-                                                                        🏠 Nhận phòng
+                                                                    <button type="button" onClick={() => handleBookingAction('checkin', b.id)} disabled={!!actionLoading} className="bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition flex items-center gap-1">
+                                                                         Nhận phòng
                                                                     </button>
-                                                                    <button onClick={() => handleBookingAction('no-show', b.id)} disabled={!!actionLoading} className="bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition hidden sm:block">
-                                                                        👻 Không đến
+                                                                    <button type="button" onClick={() => handleBookingAction('no-show', b.id)} disabled={!!actionLoading} className="bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition hidden sm:block">
+                                                                        Không đến
                                                                     </button>
                                                                 </>
                                                             )}
                                                             {b.trangThai === 'CheckedIn' && (
-                                                                <button onClick={async () => {
-                                                                    setSelectedBooking(b);
-                                                                    await fetchInvoice(b.id);
-                                                                    setShowCheckoutModal(true);
+                                                                <button type="button" onClick={async () => {
+                                                                    try {
+                                                                        const res = await axiosClient.get(`/bookings/id/${b.id}`);
+                                                                        setSelectedBooking(res.data);
+                                                                        await fetchInvoice(b.id);
+                                                                        setShowCheckoutModal(true);
+                                                                    } catch (e) {
+                                                                        showToast(e.response?.data?.message || 'Không tải được dữ liệu thanh toán', 'error');
+                                                                    }
                                                                 }} disabled={!!actionLoading} className="bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition flex items-center gap-1">
                                                                     💳 Thanh Toán
                                                                 </button>
                                                             )}
                                                             {b.trangThai === 'CheckedOut' && (
-                                                                <button onClick={() => handleBookingAction('complete', b.id)} disabled={!!actionLoading} className="bg-gray-800 text-white hover:bg-gray-900 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition flex items-center gap-1">
-                                                                    🎉 Hoàn tất
+                                                                <button type="button" onClick={() => handleBookingAction('complete', b.id)} disabled={!!actionLoading} className="bg-gray-800 text-white hover:bg-gray-900 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition flex items-center gap-1">
+                                                                     Hoàn tất
                                                                 </button>
                                                             )}
-                                                            <button onClick={() => fetchBookingDetails(b.id)} className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition">
+                                                            <button type="button" onClick={() => fetchBookingDetails(b.id)} className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition">
                                                                 Chi Tiết
                                                             </button>
                                                         </td>
@@ -1054,7 +1131,7 @@ const ManagerDashboard = () => {
                         );
                     })()}
 
-                    {/* ======== PROFILE ======== */}
+
                     {activeTab === 'profile' && (
 
                         <div className="max-w-lg">
@@ -1412,6 +1489,98 @@ const ManagerDashboard = () => {
                 </div>
             )}
 
+                    {/* ======== REVIEWS ======== */}
+                    {activeTab === 'reviews' && (
+                        <div className="space-y-6">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-gray-100 gap-4">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-gray-800">Quản Lý Đánh Giá</h2>
+                                    <p className="text-sm text-gray-500 mt-1">Xem và phản hồi ý kiến của khách hàng để nâng cao chất lượng dịch vụ</p>
+                                </div>
+                                <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-xl text-emerald-700 font-bold border border-emerald-100">
+                                    <span className="text-xl">⭐</span>
+                                    <span>{myHotel?.diemDanhGiaTrungBinh?.toFixed(1) || '0.0'} / 5.0 ({myHotel?.soLuotDanhGia || 0} lượt)</span>
+                                </div>
+                            </div>
+
+                            {loadingReviews ? (
+                                <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm text-gray-500">
+                                    <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                                    Đang tải đánh giá từ khách hàng...
+                                </div>
+                            ) : hotelReviews.length === 0 ? (
+                                <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm text-gray-400">
+                                    <div className="text-5xl mb-4">💬</div>
+                                    Khách sạn của bạn chưa có lượt đánh giá nào.
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {hotelReviews.map(review => (
+                                        <div key={review.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:border-emerald-200 transition-colors">
+                                            <div className="p-6">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-lg">
+                                                            {review.hoTenKhach?.charAt(0)?.toUpperCase()}
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-bold text-gray-800">{review.hoTenKhach}</h4>
+                                                            <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
+                                                                <span>📅 {formatDate(review.ngayDanhGia)}</span>
+                                                                <span>•</span>
+                                                                <span className="bg-gray-100 px-1.5 py-0.5 rounded">📦 Đơn: #{review.maDatPhong}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1 text-sm">
+                                                        {[1, 2, 3, 4, 5].map(star => (
+                                                            <span key={star} className={star <= review.soSaoTong ? 'text-yellow-400' : 'text-gray-200'}>★</span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-gray-50 rounded-xl p-4 text-gray-700 text-sm leading-relaxed border border-gray-100">
+                                                    <p className="italic">"{review.binhLuan}"</p>
+                                                </div>
+
+                                                {/* Manager Reply section */}
+                                                <div className="mt-4 pl-4 border-l-4 border-emerald-500 space-y-3">
+                                                    {review.phanHoi ? (
+                                                        <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100">
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">🏨 Phản hồi từ khách sạn</span>
+                                                                <span className="text-[10px] text-emerald-500 font-medium">{formatDate(review.ngayPhanHoi)}</span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-700">{review.phanHoi}</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            <textarea
+                                                                value={replyText[review.id] || ''}
+                                                                onChange={e => setReplyText({ ...replyText, [review.id]: e.target.value })}
+                                                                placeholder="Nhập phản hồi của bạn tới khách hàng..."
+                                                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none min-h-[80px] transition-all"
+                                                            />
+                                                            <div className="flex justify-end">
+                                                                <button
+                                                                    onClick={() => handleReplySubmit(review.id)}
+                                                                    disabled={isReplying === review.id || !replyText[review.id]?.trim()}
+                                                                    className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm flex items-center gap-2"
+                                                                >
+                                                                    {isReplying === review.id ? '⏳ Đang gửi...' : '🚀 Gửi phản hồi'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
             {activeTab === 'revenue' && (
                 <div className="space-y-6 animate-fade-in pb-10">
                     <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-gray-100 gap-4">
@@ -1508,8 +1677,14 @@ const ManagerDashboard = () => {
                             <p className="text-indigo-200 text-sm mt-0.5">#{selectedBooking.maDatPhong}</p>
                         </div>
                         <div className="p-6 space-y-4">
+                            {invoiceLoading && (
+                                <div className="flex flex-col items-center justify-center py-10 text-gray-500 gap-2">
+                                    <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                    <p className="text-sm">Đang tải hóa đơn...</p>
+                                </div>
+                            )}
                             {/* Tóm tắt hóa đơn */}
-                            {invoice && (
+                            {!invoiceLoading && invoice && (
                                 <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
                                     {/* Tiền phòng */}
                                     <div className="flex justify-between text-gray-600">
@@ -1555,6 +1730,11 @@ const ManagerDashboard = () => {
                                     </div>
                                 </div>
                             )}
+                            {!invoiceLoading && !invoice && (
+                                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                                    Chưa lấy được hóa đơn chi tiết. Bạn có thể thử lại sau vài giây hoặc kiểm tra kết nối server.
+                                </p>
+                            )}
                             {/* Phương thức thanh toán */}
                             <div>
                                 <label className="text-xs font-bold text-gray-600 uppercase tracking-wide block mb-2">Phương thức thanh toán</label>
@@ -1584,8 +1764,9 @@ const ManagerDashboard = () => {
                                 Hủy
                             </button>
                             <button
+                                type="button"
                                 onClick={() => handleBookingAction('checkout', selectedBooking.id, { phuongThuc: checkoutForm.phuongThuc })}
-                                disabled={!!actionLoading}
+                                disabled={!!actionLoading || invoiceLoading}
                                 className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 flex items-center gap-2">
                                 {actionLoading ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>Đang xử lý...</> : '✅ Xác nhận thanh toán'}
                             </button>
@@ -1593,6 +1774,180 @@ const ManagerDashboard = () => {
                     </div>
                 </div>
             )}
+
+                    {/* ======== PROMOTIONS ======== */}
+                    {activeTab === 'promotions' && (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-xl font-bold text-gray-800">🎁 Quản Lý Khuyến Mãi</h3>
+                                    <p className="text-sm text-gray-500 mt-0.5">Tạo draft → Gửi Admin duyệt → Kích hoạt</p>
+                                </div>
+                                <button onClick={() => { setEditingPromo(null); setPromoForm({ ten:'',moTa:'',loai:'SEASONAL',tiLeGiam:'',nganSach:'',ngayBatDau:'',ngayKetThuc:'',soLuongX:'',soLuongY:'',ghiChu:'' }); setShowPromoForm(true); }}
+                                    className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700">＋ Tạo Khuyến Mãi</button>
+                            </div>
+
+                            {/* Workflow guide */}
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-6 text-sm">
+                                {[['1. DRAFT','Bạn tạo nháp','bg-gray-200 text-gray-700'],['2. PENDING','Gửi Admin duyệt','bg-yellow-200 text-yellow-800'],['3. APPROVED','Admin duyệt','bg-green-200 text-green-800'],['4. ACTIVE','Đang chạy','bg-emerald-600 text-white']].map(([step,desc,cls])=>(
+                                    <div key={step} className="flex items-center gap-2">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${cls}`}>{step}</span>
+                                        <span className="text-gray-600 hidden sm:block">{desc}</span>
+                                    </div>
+                                ))}
+                                <div className="ml-auto text-xs text-emerald-700">💡 Ngân sách &gt; 10 triệu cần Admin duyệt thủ công</div>
+                            </div>
+
+                            {loadingPromo ? <div className="py-16 flex justify-center"><div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"/></div> : (
+                                <div className="space-y-3">
+                                    {promotions.map(p => (
+                                        <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition">
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="font-mono text-xs text-gray-400">{p.id}</span>
+                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${p.trangThai==='ACTIVE'?'bg-emerald-100 text-emerald-700':p.trangThai==='APPROVED'?'bg-green-100 text-green-700':p.trangThai==='PENDING_APPROVAL'?'bg-yellow-100 text-yellow-700':p.trangThai==='REJECTED'?'bg-red-100 text-red-700':'bg-gray-100 text-gray-600'}`}>{p.trangThai}</span>
+                                                        <span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">{p.loai}</span>
+                                                    </div>
+                                                    <p className="font-semibold text-gray-800">{p.ten}</p>
+                                                    <p className="text-sm text-gray-500 mt-0.5">{p.moTa}</p>
+                                                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                                                        {p.tiLeGiam && <span>Giảm: <strong>{p.tiLeGiam}%</strong></span>}
+                                                        {p.nganSach && <span>Ngân sách: <strong>{new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(p.nganSach)}</strong></span>}
+                                                        <span>{p.ngayBatDau} → {p.ngayKetThuc}</span>
+                                                    </div>
+                                                    {p.lyDoTuChoi && <p className="mt-2 text-xs text-red-600 bg-red-50 rounded p-2">Lý do từ chối: {p.lyDoTuChoi}</p>}
+                                                </div>
+                                                <div className="flex gap-2 ml-4 flex-shrink-0 flex-wrap justify-end">
+                                                    {p.trangThai === 'DRAFT' && (
+                                                        <>
+                                                            <button onClick={async () => {
+                                                                try { await axiosClient.put(`/promotions/${p.id}/submit`); showToast('Gửi duyệt thành công!'); fetchPromotions(); }
+                                                                catch(e) { showToast(e.response?.data?.message||'Lỗi gửi duyệt','error'); }
+                                                            }} className="px-3 py-1.5 bg-yellow-500 text-white text-xs font-semibold rounded-lg hover:bg-yellow-600">Gửi Duyệt</button>
+                                                            <button onClick={() => { setEditingPromo(p); setPromoForm({ten:p.ten,moTa:p.moTa||'',loai:p.loai,tiLeGiam:p.tiLeGiam||'',nganSach:p.nganSach||'',ngayBatDau:p.ngayBatDau,ngayKetThuc:p.ngayKetThuc,soLuongX:p.soLuongX||'',soLuongY:p.soLuongY||'',ghiChu:p.ghiChu||''}); setShowPromoForm(true); }}
+                                                                className="px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50">Sửa</button>
+                                                            <button onClick={async () => {
+                                                                if(!window.confirm(`Xóa khuyen mãi "${p.ten}"?`)) return;
+                                                                try { await axiosClient.delete(`/promotions/${p.id}`); showToast('Xóa thành công!'); fetchPromotions(); }
+                                                                catch(e) { showToast(e.response?.data?.message||'Lỗi xóa','error'); }
+                                                            }} className="px-3 py-1.5 border border-red-200 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-50">Xóa</button>
+                                                        </>
+                                                    )}
+                                                    {p.trangThai === 'REJECTED' && (
+                                                        <>
+                                                            <button onClick={() => { setEditingPromo(p); setPromoForm({ten:p.ten,moTa:p.moTa||'',loai:p.loai,tiLeGiam:p.tiLeGiam||'',nganSach:p.nganSach||'',ngayBatDau:p.ngayBatDau,ngayKetThuc:p.ngayKetThuc,soLuongX:p.soLuongX||'',soLuongY:p.soLuongY||'',ghiChu:p.ghiChu||''}); setShowPromoForm(true); }}
+                                                                className="px-3 py-1.5 border border-blue-200 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-50">Chỉnh Sửa Lại</button>
+                                                            <button onClick={async () => {
+                                                                if(!window.confirm(`Xóa khuyen mãi "${p.ten}"?`)) return;
+                                                                try { await axiosClient.delete(`/promotions/${p.id}`); showToast('Xóa thành công!'); fetchPromotions(); }
+                                                                catch(e) { showToast(e.response?.data?.message||'Lỗi xóa','error'); }
+                                                            }} className="px-3 py-1.5 border border-red-200 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-50">Xóa</button>
+                                                        </>
+                                                    )}
+                                                    {/* Admin approve/reject for PENDING */}
+                                                    {p.trangThai === 'PENDING_APPROVAL' && (user?.role === 'Admin' || user?.role === 'ADMIN') && (
+                                                        <>
+                                                            <button onClick={async () => {
+                                                                try { await axiosClient.put(`/promotions/${p.id}/review`, { approved: true }); showToast('Duyệt thành công!'); fetchPromotions(); }
+                                                                catch(e) { showToast(e.response?.data?.message||'Lỗi duyệt','error'); }
+                                                            }} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700">Duyệt</button>
+                                                            <button onClick={async () => {
+                                                                const ly_do = prompt('Lý do từ chối:');
+                                                                if (ly_do === null) return;
+                                                                try { await axiosClient.put(`/promotions/${p.id}/review`, { approved: false, lyDoTuChoi: ly_do }); showToast('Từ chối!'); fetchPromotions(); }
+                                                                catch(e) { showToast(e.response?.data?.message||'Lỗi từ chối','error'); }
+                                                            }} className="px-3 py-1.5 border border-red-200 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-50">Từ Chối</button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {promotions.length === 0 && (
+                                        <div className="bg-white rounded-xl p-16 text-center text-gray-400">
+                                            <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" /></svg>
+                                            <p className="font-medium">Chưa có khuyến mãi nào. Hãy tạo khuyến mãi đầu tiên!</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Create/Edit Promotion Modal */}
+                            {showPromoForm && (
+                                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowPromoForm(false)}>
+                                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                                        <div className="flex items-center justify-between px-6 py-4 border-b">
+                                            <h3 className="font-bold text-gray-800">🎁 {editingPromo ? 'Chỉnh Sửa' : 'Tạo'} Khuyến Mãi</h3>
+                                            <button onClick={() => setShowPromoForm(false)} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+                                        </div>
+                                        <div className="p-6 space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="col-span-2">
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Tên khuyến mãi *</label>
+                                                    <input value={promoForm.ten} onChange={e=>setPromoForm(f=>({...f,ten:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="VD: Giảm 20% mùa hè 2025"/>
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Mô tả</label>
+                                                    <textarea value={promoForm.moTa} onChange={e=>setPromoForm(f=>({...f,moTa:e.target.value}))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="Mô tả chi tiết chương trình..."/>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Loại *</label>
+                                                    <select value={promoForm.loai} onChange={e=>setPromoForm(f=>({...f,loai:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+                                                        <option value="SEASONAL">SEASONAL (Theo mùa)</option>
+                                                        <option value="COMBO">COMBO</option>
+                                                        <option value="BUY_X_GET_Y">BUY X GET Y</option>
+                                                        <option value="FLASH_SALE">FLASH SALE</option>
+                                                        <option value="LOYALTY">LOYALTY</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Tỉ lệ giảm (%)</label>
+                                                    <input type="number" value={promoForm.tiLeGiam} onChange={e=>setPromoForm(f=>({...f,tiLeGiam:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="20"/>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Ngân sách (VNĐ)</label>
+                                                    <input type="number" value={promoForm.nganSach} onChange={e=>setPromoForm(f=>({...f,nganSach:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="5000000"/>
+                                                    {parseFloat(promoForm.nganSach) > 10000000 && <p className="text-xs text-orange-600 mt-1">⚠️ Ngân sách &gt; 10 triệu → Admin duyệt thủ công</p>}
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu *</label>
+                                                    <input type="date" value={promoForm.ngayBatDau} onChange={e=>setPromoForm(f=>({...f,ngayBatDau:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"/>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Ngày kết thúc *</label>
+                                                    <input type="date" value={promoForm.ngayKetThuc} onChange={e=>setPromoForm(f=>({...f,ngayKetThuc:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"/>
+                                                </div>
+                                                {promoForm.loai === 'BUY_X_GET_Y' && (<>
+                                                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Mua X đêm</label>
+                                                        <input type="number" value={promoForm.soLuongX} onChange={e=>setPromoForm(f=>({...f,soLuongX:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="2"/></div>
+                                                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Tặng Y đêm</label>
+                                                        <input type="number" value={promoForm.soLuongY} onChange={e=>setPromoForm(f=>({...f,soLuongY:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="1"/></div>
+                                                </>)}
+                                                <div className="col-span-2">
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Ghi chú cho Admin</label>
+                                                    <textarea value={promoForm.ghiChu} onChange={e=>setPromoForm(f=>({...f,ghiChu:e.target.value}))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="Lý do cần phê duyệt, mục tiêu..."/>
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end gap-3 pt-2 border-t">
+                                                <button onClick={() => setShowPromoForm(false)} className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50">Hủy</button>
+                                                <button onClick={async () => {
+                                                    try {
+                                                        const payload = { ...promoForm, tiLeGiam: promoForm.tiLeGiam?parseFloat(promoForm.tiLeGiam):null, nganSach: promoForm.nganSach?parseFloat(promoForm.nganSach):null, soLuongX: promoForm.soLuongX?parseInt(promoForm.soLuongX):null, soLuongY: promoForm.soLuongY?parseInt(promoForm.soLuongY):null, khachSanId: myHotel?.id };
+                                                        if (editingPromo) { await axiosClient.put(`/promotions/${editingPromo.id}`, payload); showToast('Đã cập nhật khuyến mãi!'); }
+                                                        else { await axiosClient.post('/promotions', payload); showToast('Tạo khuyến mãi thành công!'); }
+                                                        setShowPromoForm(false); fetchPromotions();
+                                                    } catch(e) { showToast(e.response?.data?.message||'Lỗi lưu khuyến mãi','error'); }
+                                                }} className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700">
+                                                    {editingPromo ? 'Cập Nhật' : 'Lưu Nháp'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
             {/* ---- TOAST NOTIFICATION ---- */}
             {toast && (

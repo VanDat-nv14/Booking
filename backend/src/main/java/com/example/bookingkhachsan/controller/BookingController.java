@@ -1,7 +1,7 @@
 package com.example.bookingkhachsan.controller;
 
 import com.example.bookingkhachsan.dto.BookingDto;
-import com.example.bookingkhachsan.entity.PhieuDatPhong;
+// import com.example.bookingkhachsan.entity.PhieuDatPhong;
 import com.example.bookingkhachsan.service.BookingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

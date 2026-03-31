@@ -1,5 +1,6 @@
 package com.example.bookingkhachsan.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDate;
@@ -26,6 +27,7 @@ public class NguoiDung implements UserDetails {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @JsonIgnore
     @Column(name = "mat_khau", nullable = false)
     private String matKhau;
 
@@ -97,6 +99,7 @@ public class NguoiDung implements UserDetails {
         return List.of(new SimpleGrantedAuthority("ROLE_" + (chucVu != null ? chucVu : "User")));
     }
 
+    @JsonIgnore
     @Override
     public String getPassword() {
         return matKhau;

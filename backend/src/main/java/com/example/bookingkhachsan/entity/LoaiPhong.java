@@ -3,7 +3,7 @@ package com.example.bookingkhachsan.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
-import java.util.List;
+// import java.util.List;
 
 @Entity
 @Table(name = "loai_phong")

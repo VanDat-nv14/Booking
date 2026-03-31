@@ -61,6 +61,8 @@ public class HotelDetailDto {
         private Integer soSaoTong;
         private String binhLuan;
         private String trangThai;
+        private String phanHoi;
+        private LocalDateTime ngayPhanHoi;
         private LocalDateTime ngayDanhGia;
     }
 }
