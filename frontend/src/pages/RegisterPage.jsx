@@ -60,8 +60,8 @@ const RegisterPage = () => {
         const pwErr = validatePassword(matKhau);
         if (pwErr) return pwErr;
         if (matKhau !== xacNhanMatKhau) return 'Mật khẩu xác nhận không khớp!';
-        const phoneRegex = /^\d{9,11}$/;
-        if (!phoneRegex.test(sdt)) return 'Số điện thoại phải có từ 9-11 chữ số';
+        const phoneRegex = /^\d{10}$/;
+        if (!phoneRegex.test(sdt)) return 'Số điện thoại phải có đúng 10 chữ số';
         return null;
     };
 
@@ -153,8 +153,10 @@ const RegisterPage = () => {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
                             <input
-                                name="sdt" type="text" required
-                                onChange={handleChange}
+                                name="sdt" type="tel" required
+                                onChange={e => setFormData(f => ({ ...f, sdt: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                                value={formData.sdt}
+                                maxLength={10}
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
                                 placeholder="0912345678"
                             />

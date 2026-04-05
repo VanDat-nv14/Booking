@@ -2,7 +2,6 @@ package com.example.bookingkhachsan.service;
 
 import com.example.bookingkhachsan.entity.AuditLog;
 import com.example.bookingkhachsan.entity.Discount;
-import com.example.bookingkhachsan.entity.KhachSan;
 import com.example.bookingkhachsan.repository.AuditLogRepository;
 import com.example.bookingkhachsan.repository.DiscountRepository;
 import com.example.bookingkhachsan.repository.KhachSanRepository;
@@ -39,9 +38,10 @@ public class DiscountService {
             BigDecimal giamToiDa,
             BigDecimal donHangToiThieu,
             Integer soLanSuDungToiDa,
+            Integer soLanToiDaMoiUser,
             LocalDate ngayBatDau,
             LocalDate ngayKetThuc,
-            Integer khachSanId
+            Integer khachSanId // bắt buộc null — mã nền tảng không gắn KS
     ) {}
 
     public record UpdateDiscountRequest(
@@ -102,12 +102,10 @@ public class DiscountService {
             throw new IllegalArgumentException("Ngày bắt đầu phải trước ngày kết thúc.");
         }
 
-        // 5. Optional: hotel
-        KhachSan khachSan = null;
+        // 5. Mã giảm giá nền tảng (Admin) không gắn khách sạn
         if (req.khachSanId() != null) {
-            khachSan = khachSanRepository.findById(req.khachSanId())
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Khách sạn ID " + req.khachSanId() + " không tồn tại."));
+            throw new IllegalArgumentException(
+                    "Mã giảm giá nền tảng không được gắn khách sạn. Dùng Promotion Code cho từng khách sạn.");
         }
 
         Discount discount = Discount.builder()
@@ -120,10 +118,11 @@ public class DiscountService {
                 .giamToiDa(req.giamToiDa())
                 .donHangToiThieu(req.donHangToiThieu())
                 .soLanSuDungToiDa(req.soLanSuDungToiDa())
+                .soLanToiDaMoiUser(req.soLanToiDaMoiUser())
                 .soLanDaDung(0)
                 .ngayBatDau(req.ngayBatDau())
                 .ngayKetThuc(req.ngayKetThuc())
-                .khachSan(khachSan)
+                .khachSan(null)
                 .trangThai("ACTIVE")
                 .nguoiTao(adminEmail)
                 .build();
@@ -225,8 +224,9 @@ public class DiscountService {
                     BigDecimal.ZERO, null);
         }
         // Kiểm tra hotel scope
-        if (discount.getKhachSan() != null && !discount.getKhachSan().getId().equals(hotelId)) {
-            return new ValidateDiscountResult(false, "Mã giảm giá không áp dụng cho khách sạn này.", BigDecimal.ZERO, null);
+        if (discount.getKhachSan() != null) {
+            return new ValidateDiscountResult(false,
+                    "Mã giảm giá nền tảng không được gắn khách sạn.", BigDecimal.ZERO, null);
         }
 
         // Tính toán

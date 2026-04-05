@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -154,22 +155,29 @@ public class SystemNotificationService {
     }
 
     /**
-     * Tạo thông báo gửi trực tiếp cho một người dùng (không qua duyệt/chu kỳ lên lịch).
+     * Thông báo chuông trong app (theo email tài khoản trong DB). Không dùng SMTP/Gmail.
+     * <p>REQUIRES_NEW: lỗi lưu thông báo không được phép làm hủy giao dịch nghiệp vụ chính (đặt phòng),
+     * tránh 500 sau khi đã gửi mail nhưng insert notification thất bại / trùng khóa.</p>
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public SystemNotification createDirectNotification(String receiverEmail, String title, String content, String type) {
+        String emailNorm = normalizeEmail(receiverEmail);
+        if (emailNorm == null || emailNorm.isBlank()) {
+            log.warn("[SYSTEM_NOTIFICATION] Bỏ qua thông báo cá nhân — email người nhận rỗng.");
+            return null;
+        }
         SystemNotification notification = SystemNotification.builder()
                 .id(idGenerator.generateNotificationId())
                 .tieuDe(title)
                 .noiDung(content)
                 .loai(type != null ? type : "INFO")
                 .doiTuong("PRIVATE") // Đánh dấu là cá nhân
-                .nguoiNhan(receiverEmail)
+                .nguoiNhan(emailNorm)
                 .trangThai("SENT")
                 .ngayGui(LocalDateTime.now())
                 .kenhGui("APP")
                 .build();
-        
+
         return notificationRepository.save(notification);
     }
 
@@ -191,9 +199,12 @@ public class SystemNotificationService {
      */
     @Transactional
     public List<SystemNotification> getFilteredNotifications(String role, String email) {
-        List<SystemNotification> list = notificationRepository.findFilteredNotifications(role, email);
-        list.forEach(this::applyTitleRepair);
         String emailKey = normalizeEmail(email);
+        if (emailKey == null || emailKey.isBlank()) {
+            return List.of();
+        }
+        List<SystemNotification> list = notificationRepository.findFilteredNotifications(role, emailKey);
+        list.forEach(this::applyTitleRepair);
         Set<String> readIds = new HashSet<>(notificationReadRepository.findNotificationIdsByUserEmail(emailKey));
         list.forEach(n -> n.setRead(readIds.contains(n.getId())));
         return list;
@@ -217,6 +228,28 @@ public class SystemNotificationService {
     }
 
     /**
+     * Đánh dấu tất cả thông báo của user là đã đọc.
+     */
+    @Transactional
+    public void markAllAsRead(String userEmail, String role) {
+        String emailKey = normalizeEmail(userEmail);
+        if (emailKey == null || emailKey.isBlank()) return;
+        List<SystemNotification> list = notificationRepository.findFilteredNotifications(role, emailKey);
+        Set<String> alreadyRead = new HashSet<>(notificationReadRepository.findNotificationIdsByUserEmail(emailKey));
+        for (SystemNotification n : list) {
+            if (!alreadyRead.contains(n.getId())) {
+                try {
+                    notificationReadRepository.save(SystemNotificationRead.builder()
+                            .userEmail(emailKey)
+                            .notificationId(n.getId())
+                            .readAt(LocalDateTime.now())
+                            .build());
+                } catch (Exception ignored) { }
+            }
+        }
+    }
+
+    /**
      * Đánh dấu đã đọc (chỉ khi thông báo thuộc danh sách được phép xem của user).
      */
     @Transactional
@@ -224,7 +257,7 @@ public class SystemNotificationService {
         getById(notificationId);
         boolean isAdmin = "Admin".equals(role) || "ADMIN".equals(role);
         if (!isAdmin) {
-            List<SystemNotification> allowed = notificationRepository.findFilteredNotifications(role, userEmail);
+            List<SystemNotification> allowed = notificationRepository.findFilteredNotifications(role, normalizeEmail(userEmail));
             if (allowed.stream().noneMatch(n -> notificationId.equals(n.getId()))) {
                 throw new IllegalArgumentException("Không tìm thấy thông báo hoặc không có quyền.");
             }
@@ -279,7 +312,10 @@ public class SystemNotificationService {
     public List<SystemNotification> getAll() {
         List<SystemNotification> all = notificationRepository.findAll();
         all.forEach(this::applyTitleRepair);
-        return all;
+        // Chỉ hiện thông báo do Admin tạo thủ công (nguoiTao != null) trong danh sách quản lý
+        return all.stream()
+                .filter(n -> n.getNguoiTao() != null)
+                .toList();
     }
 
     @Transactional
@@ -293,7 +329,58 @@ public class SystemNotificationService {
     public List<SystemNotification> getByStatus(String trangThai) {
         List<SystemNotification> list = notificationRepository.findByTrangThaiOrderByCreatedAtDesc(trangThai);
         list.forEach(this::applyTitleRepair);
-        return list;
+        // Chỉ hiện thông báo do Admin tạo thủ công (nguoiTao != null) trong danh sách quản lý
+        return list.stream()
+                .filter(n -> n.getNguoiTao() != null)
+                .toList();
+    }
+
+    /**
+     * Admin cập nhật thông báo (chỉ với thông báo thủ công).
+     */
+    @Transactional
+    public SystemNotification updateNotification(String id, CreateNotificationRequest req, String adminEmail) {
+        SystemNotification n = getById(id);
+        if (n.getNguoiTao() == null) {
+            throw new IllegalArgumentException("Không thể chỉnh sửa thông báo hệ thống tự động.");
+        }
+
+        if (req.tieuDe() != null && !req.tieuDe().isBlank()) n.setTieuDe(req.tieuDe());
+        if (req.noiDung() != null && !req.noiDung().isBlank()) n.setNoiDung(req.noiDung());
+        if (req.loai() != null && VALID_TYPES.contains(req.loai())) n.setLoai(req.loai());
+        if (req.doiTuong() != null) n.setDoiTuong(normalizeDoiTuong(req.doiTuong()));
+        if (req.lichGui() != null) n.setLichGui(req.lichGui());
+
+        SystemNotification updated = notificationRepository.save(n);
+
+        auditLogRepository.save(AuditLog.builder()
+                .module("SYSTEM_NOTIFICATION")
+                .entityId(id)
+                .action("UPDATE")
+                .performedBy(adminEmail)
+                .role("Admin")
+                .description("Cập nhật thông báo: " + n.getTieuDe())
+                .build());
+
+        return updated;
+    }
+
+    /**
+     * Admin xóa thông báo hoàn toàn.
+     */
+    @Transactional
+    public void deleteNotification(String id, String adminEmail) {
+        SystemNotification n = getById(id);
+        notificationRepository.delete(n);
+
+        auditLogRepository.save(AuditLog.builder()
+                .module("SYSTEM_NOTIFICATION")
+                .entityId(id)
+                .action("DELETE")
+                .performedBy(adminEmail)
+                .role("Admin")
+                .description("Xóa thông báo: " + (n.getTieuDe() != null ? n.getTieuDe() : id))
+                .build());
     }
 
     /**

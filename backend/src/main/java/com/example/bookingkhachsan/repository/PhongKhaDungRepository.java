@@ -67,9 +67,23 @@ public interface PhongKhaDungRepository extends JpaRepository<PhongKhaDung, Inte
                                     @Param("trangThai") String trangThai);
 
     @Modifying
-    @Query("""
-        UPDATE PhongKhaDung pkd SET pkd.trangThai = 'Trong', pkd.phieuDatPhong = null
-        WHERE pkd.phieuDatPhong.id = :bookingId
-        """)
+    @Query("DELETE FROM PhongKhaDung pkd WHERE pkd.phieuDatPhong.id = :bookingId")
     void releaseRoomByBookingId(@Param("bookingId") Integer bookingId);
+
+    /**
+     * Tìm các booking Pending đang giữ phòng trong khoảng ngày (để dọn dẹp trước khi tạo mới).
+     */
+    @Query("""
+        SELECT DISTINCT pkd.phieuDatPhong FROM PhongKhaDung pkd
+        WHERE pkd.phong.id = :phongId
+          AND pkd.ngay >= :checkIn
+          AND pkd.ngay < :checkOut
+          AND pkd.trangThai = 'TamGiu'
+          AND pkd.phieuDatPhong.trangThai = 'Pending'
+        """)
+    List<com.example.bookingkhachsan.entity.PhieuDatPhong> findPendingBookingsBlockingRoom(
+            @Param("phongId") Integer phongId,
+            @Param("checkIn") LocalDate checkIn,
+            @Param("checkOut") LocalDate checkOut
+    );
 }

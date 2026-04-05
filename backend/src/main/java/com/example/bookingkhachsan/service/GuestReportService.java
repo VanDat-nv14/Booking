@@ -28,6 +28,7 @@ public class GuestReportService {
     private final KhachSanRepository khachSanRepository;
     private final AuditLogRepository auditLogRepository;
     private final IdGenerator idGenerator;
+    private final SystemNotificationService systemNotificationService;
 
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
@@ -207,6 +208,30 @@ public class GuestReportService {
                 .role(role)
                 .description("Cập nhật báo cáo: " + oldStatus + " -> " + req.trangThai())
                 .build());
+
+        // Gửi thông báo cho khách (nếu có email) khi báo cáo được xử lý
+        if (updated.getEmail() != null && req.trangThai() != null
+                && ("RESOLVED".equals(req.trangThai()) || "CLOSED".equals(req.trangThai()))) {
+            try {
+                String statusLabel = "RESOLVED".equals(req.trangThai()) ? "đã được giải quyết" : "đã được đóng lại";
+                String notifTitle = "Báo cáo sự cố của bạn " + statusLabel;
+                String phanHoiText = (updated.getPhanHoi() != null && !updated.getPhanHoi().isBlank())
+                        ? " Phản hồi: " + updated.getPhanHoi()
+                        : "";
+                String notifContent = String.format(
+                        "Báo cáo #%s (%s) %s.%s",
+                        updated.getId(),
+                        updated.getLoaiVanDe(),
+                        statusLabel,
+                        phanHoiText
+                );
+                systemNotificationService.createDirectNotification(
+                        updated.getEmail(), notifTitle, notifContent, "INFO");
+            } catch (Exception ex) {
+                log.warn("[GUEST_REPORT] Không thể gửi thông báo cho khách {}: {}",
+                        updated.getEmail(), ex.getMessage());
+            }
+        }
 
         return updated;
     }

@@ -44,7 +44,8 @@ public class SecurityConfiguration {
                 // OAuth2 endpoints (Spring Security)
                 .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/hotels/**", "/api/room-types/**").permitAll()
-
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/coupons/public/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/coupons/preview").permitAll()
 
                 // --- Admin only ---
                 // Dung hasAuthority("ROLE_Admin") thay vi hasRole("ADMIN")

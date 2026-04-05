@@ -197,8 +197,8 @@ const SearchPage = () => {
                                         )}
                                     </div>
 
-                                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50">
-                                        <div>
+                                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-50 flex-wrap gap-2">
+                                        <div className="flex flex-col gap-1.5">
                                             {hotel.diemDanhGiaTrungBinh ? (
                                                 <p className="text-sm text-gray-500 inline-flex items-center gap-1">
                                                     <IconStar className="w-4 h-4 text-amber-500" />
@@ -207,6 +207,18 @@ const SearchPage = () => {
                                             ) : (
                                                 <p className="text-xs text-gray-400 italic">Chưa có đánh giá</p>
                                             )}
+                                            <span
+                                                className={`inline-flex w-fit text-xs font-bold px-2.5 py-1 rounded-lg ${
+                                                    (hotel.soPhongTrong ?? 0) > 0
+                                                        ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80'
+                                                        : 'bg-red-50 text-red-700 ring-1 ring-red-200/80'
+                                                }`}
+                                                title="Số phòng còn trống theo ngày bạn chọn (lịch thực tế)"
+                                            >
+                                                {(hotel.soPhongTrong ?? 0) > 0
+                                                    ? `${hotel.soPhongTrong} phòng trống`
+                                                    : 'Hết phòng'}
+                                            </span>
                                         </div>
                                         <Link
                                             to={`/hotels/${hotel.id}`}

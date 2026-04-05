@@ -22,8 +22,6 @@ public class PhongDto {
     @NotNull(message = "Loại phòng không được để trống")
     private Integer loaiPhongId;
 
-    private String khuyenMaiId;
-
     private String trangThai;
 
     private Integer tang;

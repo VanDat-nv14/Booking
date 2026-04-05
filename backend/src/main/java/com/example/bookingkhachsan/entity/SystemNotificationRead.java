@@ -2,8 +2,6 @@ package com.example.bookingkhachsan.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -25,11 +23,9 @@ public class SystemNotificationRead {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
     @Column(name = "user_email", nullable = false, length = 200)
     private String userEmail;
 
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
     @Column(name = "notification_id", nullable = false, length = 30)
     private String notificationId;
 

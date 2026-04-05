@@ -103,6 +103,20 @@ const PaymentPage = () => {
         </div>
       </div>
 
+      {/* Thông tin thẻ test sandbox VNPAY */}
+      {method !== 'MoMo' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <p className="text-xs font-bold text-amber-700 mb-2">Thông tin thẻ test (Sandbox VNPAY)</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-amber-800 font-mono">
+            <span className="text-gray-500">Ngân hàng:</span><span className="font-semibold">NCB</span>
+            <span className="text-gray-500">Số thẻ:</span><span className="font-semibold">9704198526191432198</span>
+            <span className="text-gray-500">Họ tên:</span><span className="font-semibold">NGUYEN VAN A</span>
+            <span className="text-gray-500">Ngày hiệu lực:</span><span className="font-semibold">07/15</span>
+            <span className="text-gray-500">OTP:</span><span className="font-semibold">123456</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row justify-center gap-3 pt-4 border-t border-dashed border-gray-200">
         <button
           type="button"

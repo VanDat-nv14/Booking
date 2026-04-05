@@ -45,6 +45,10 @@ public final class NotificationTitleFix {
         if (t.contains("Gi?m") || t.contains("gi?m")) {
             return t.replace("Gi?m", "Giảm").replace("gi?m", "giảm");
         }
+        // Kỳ nghỉ hè (Kì ngh? hè tuy?t v?i → Kỳ nghỉ hè tuyệt vời)
+        if (t.contains("Kì ngh?") || t.contains("Kỳ ngh?")) {
+            return t.replace("Kì ngh?", "Kỳ nghỉ").replace("Kỳ ngh?", "Kỳ nghỉ").replace("tuy?t", "tuyệt").replace("v?i", "vời");
+        }
         return tieuDe;
     }
 

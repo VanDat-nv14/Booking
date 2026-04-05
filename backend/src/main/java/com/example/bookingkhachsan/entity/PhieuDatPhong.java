@@ -110,6 +110,22 @@ public class PhieuDatPhong {
     @Column(name = "trang_thai_coc", length = 20)
     private String trangThaiCoc = "ChuaCoc";
 
+    /** DISCOUNT (nền tảng) | PROMO_CODE (theo KS) — một booking chỉ một mã */
+    @Column(name = "coupon_nguon", length = 20)
+    private String couponNguon;
+
+    @Column(name = "coupon_ref_id", length = 40)
+    private String couponRefId;
+
+    @Column(name = "ma_coupon", length = 50)
+    private String maCoupon;
+
+    @Column(name = "tien_giam_coupon", precision = 15, scale = 2)
+    private BigDecimal tienGiamCoupon;
+
+    /** Tiền giảm từ loyalty program (tier + membership discount) */
+    @Column(name = "tien_giam_loyalty", precision = 15, scale = 2)
+    private BigDecimal tienGiamLoyalty = BigDecimal.ZERO;
 
     // ===  Timestamps ===
     @Column(name = "ngay_dat", insertable = false, updatable = false)

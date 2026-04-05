@@ -1,5 +1,6 @@
 package com.example.bookingkhachsan.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -25,6 +26,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Discount {
 
     @Id
@@ -67,6 +69,10 @@ public class Discount {
     @Column(name = "so_lan_da_dung")
     @Builder.Default
     private Integer soLanDaDung = 0;
+
+    /** Số lần tối đa mỗi user (null = không giới hạn) */
+    @Column(name = "so_lan_toi_da_moi_user")
+    private Integer soLanToiDaMoiUser;
 
     @Column(name = "ngay_bat_dau", nullable = false)
     private LocalDate ngayBatDau;

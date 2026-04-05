@@ -4,8 +4,6 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,6 +12,9 @@ import java.time.LocalDateTime;
 
 /**
  * Thông báo hệ thống gửi đến người dùng theo vai trò.
+ * <p>String fields dùng mapping mặc định của Hibernate + SQL Server để khớp cột VARCHAR/NVARCHAR
+ * thực tế trong DB; ép {@code NVARCHAR} qua {@code SqlTypes.NVARCHAR} từng gây lỗi driver
+ * "The conversion from varchar to NCHAR is unsupported" khi cột là VARCHAR.</p>
  *
  * Loại thông báo:
  *  - SYSTEM: Thông báo hệ thống (bảo trì, cập nhật)
@@ -33,21 +34,15 @@ public class SystemNotification {
     @Column(name = "id", length = 30)
     private String id; // NTB-YYYYMMDD-XXXX
 
-    /**
-     * Dùng {@link SqlTypes#NVARCHAR}: JDBC map đúng Unicode trên SQL Server (tránh VARCHAR + ?).
-     */
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
-    @Column(name = "tieu_de", nullable = false, length = 300)
+    @Column(name = "tieu_de", nullable = false, length = 300, columnDefinition = "NVARCHAR(300)")
     private String tieuDe;
 
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
     @Column(name = "noi_dung", nullable = false, columnDefinition = "NVARCHAR(MAX)")
     private String noiDung;
 
     /**
      * Loại thông báo: SYSTEM, POLICY, ALERT, INFO
      */
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
     @Column(name = "loai", nullable = false, length = 20)
     private String loai;
 
@@ -55,7 +50,6 @@ public class SystemNotification {
      * Đối tượng nhận:
      * ALL, Admin, HotelManager, User (khớp chucVu); PRIVATE cho thông báo cá nhân.
      */
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
     @Column(name = "doi_tuong", length = 50)
     @Builder.Default
     private String doiTuong = "ALL";
@@ -64,7 +58,6 @@ public class SystemNotification {
      * Kênh gửi: APP, EMAIL, SMS (comma-separated)
      * Hiện tại EMAIL/SMS là các trường dữ liệu chờ, APP là kênh chính hoạt động.
      */
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
     @Column(name = "kenh_gui", length = 100)
     @Builder.Default
     private String kenhGui = "APP";
@@ -74,7 +67,6 @@ public class SystemNotification {
      * DRAFT (nháp), PENDING_CONFIRM (chờ xác nhận lần 2 - chỉ ALERT),
      * SCHEDULED (đã lên lịch), SENT (đã gửi), CANCELLED (đã hủy)
      */
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
     @Column(name = "trang_thai", length = 30)
     @Builder.Default
     private String trangThai = "DRAFT";
@@ -88,16 +80,13 @@ public class SystemNotification {
     private LocalDateTime ngayGui;
 
     /** Người tạo (email) */
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
     @Column(name = "nguoi_tao", length = 200)
     private String nguoiTao;
 
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
     @Column(name = "nguoi_xac_nhan", length = 200)
     private String nguoiXacNhan;
 
     /** Email người nhận cụ thể (nullable: nếu có giá trị thì chỉ người này thấy) */
-    @JdbcTypeCode(SqlTypes.NVARCHAR)
     @Column(name = "nguoi_nhan", length = 200)
     private String nguoiNhan;
 

@@ -1,14 +1,16 @@
 package com.example.bookingkhachsan.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "vi_tri")
 @Data
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ViTri {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

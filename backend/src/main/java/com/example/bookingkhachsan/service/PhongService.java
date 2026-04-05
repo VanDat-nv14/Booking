@@ -2,7 +2,6 @@ package com.example.bookingkhachsan.service;
 
 import com.example.bookingkhachsan.dto.PhongDto;
 import com.example.bookingkhachsan.entity.KhachSan;
-import com.example.bookingkhachsan.entity.KhuyenMai;
 import com.example.bookingkhachsan.entity.LoaiPhong;
 import com.example.bookingkhachsan.entity.Phong;
 import com.example.bookingkhachsan.repository.KhachSanRepository;
@@ -36,12 +35,6 @@ public class PhongService {
         phong.setKhachSan(hotel);
         phong.setLoaiPhong(loaiPhong);
 
-        if (dto.getKhuyenMaiId() != null) {
-            KhuyenMai km = new KhuyenMai();
-            km.setId(dto.getKhuyenMaiId());
-            phong.setKhuyenMai(km);
-        }
-
         return phongRepository.save(phong);
     }
 
@@ -49,10 +42,9 @@ public class PhongService {
         Phong phong = phongRepository.findById(roomId)
                 .orElseThrow(() -> new RuntimeException("Phòng không tồn tại"));
 
-        // Verify the room belongs to the manager's hotel
         KhachSan hotel = khachSanRepository.findByNguoiQuanLy_Id(managerId)
                 .orElseThrow(() -> new RuntimeException("Bạn chưa quản lý khách sạn nào"));
-        
+
         if (!phong.getKhachSan().getId().equals(hotel.getId())) {
             throw new RuntimeException("Phòng không thuộc khách sạn của bạn");
         }
@@ -62,14 +54,6 @@ public class PhongService {
 
         mapDtoToEntity(dto, phong);
         phong.setLoaiPhong(loaiPhong);
-        
-        if (dto.getKhuyenMaiId() != null) {
-            KhuyenMai km = new KhuyenMai();
-            km.setId(dto.getKhuyenMaiId());
-            phong.setKhuyenMai(km);
-        } else {
-            phong.setKhuyenMai(null);
-        }
 
         return phongRepository.save(phong);
     }
@@ -77,14 +61,14 @@ public class PhongService {
     public void deleteRoom(Integer managerId, Integer roomId) {
         Phong phong = phongRepository.findById(roomId)
                 .orElseThrow(() -> new RuntimeException("Phòng không tồn tại"));
-                
+
         KhachSan hotel = khachSanRepository.findByNguoiQuanLy_Id(managerId)
                 .orElseThrow(() -> new RuntimeException("Bạn chưa quản lý khách sạn nào"));
-                
+
         if (!phong.getKhachSan().getId().equals(hotel.getId())) {
             throw new RuntimeException("Phòng không thuộc khách sạn của bạn");
         }
-        
+
         phongRepository.deleteById(roomId);
     }
 

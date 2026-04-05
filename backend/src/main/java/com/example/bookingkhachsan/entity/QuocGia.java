@@ -1,5 +1,6 @@
 package com.example.bookingkhachsan.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -11,6 +12,7 @@ import java.util.List;
 @Entity
 @Table(name = "quoc_gia")
 @Data
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class QuocGia {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

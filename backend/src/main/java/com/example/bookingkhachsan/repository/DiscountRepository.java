@@ -1,7 +1,9 @@
 package com.example.bookingkhachsan.repository;
 
 import com.example.bookingkhachsan.entity.Discount;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -15,6 +17,10 @@ public interface DiscountRepository extends JpaRepository<Discount, String> {
 
     Optional<Discount> findByCode(String code);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT d FROM Discount d WHERE d.code = :code")
+    Optional<Discount> findByCodeForUpdate(@Param("code") String code);
+
     boolean existsByCode(String code);
 
     List<Discount> findByTrangThaiOrderByCreatedAtDesc(String trangThai);
@@ -26,6 +32,10 @@ public interface DiscountRepository extends JpaRepository<Discount, String> {
 
     @Query("SELECT d FROM Discount d WHERE (d.khachSan IS NULL OR d.khachSan.id = :hotelId) AND d.trangThai = 'ACTIVE' AND d.ngayBatDau <= :today AND d.ngayKetThuc >= :today")
     List<Discount> findActiveDiscountsForHotel(@Param("hotelId") Integer hotelId, @Param("today") LocalDate today);
+
+    /** Mã giảm giá nền tảng (Admin), không gắn khách sạn — hiển thị công khai trên UI */
+    @Query("SELECT d FROM Discount d WHERE d.khachSan IS NULL AND d.trangThai = 'ACTIVE' AND d.ngayBatDau <= :today AND d.ngayKetThuc >= :today ORDER BY d.ngayKetThuc ASC")
+    List<Discount> findActivePlatformDiscounts(@Param("today") LocalDate today);
 
     List<Discount> findByNguoiTaoOrderByCreatedAtDesc(String nguoiTao);
 

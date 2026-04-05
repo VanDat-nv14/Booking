@@ -37,9 +37,10 @@ public class BookingController {
             @PathVariable Integer khachSanId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkIn,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkOut,
-            @RequestParam(required = false) Integer loaiPhongId
+            @RequestParam(required = false) Integer loaiPhongId,
+            @RequestParam(required = false) Integer soKhach
     ) {
-        return ResponseEntity.ok(bookingService.getAvailableRooms(khachSanId, checkIn, checkOut, loaiPhongId));
+        return ResponseEntity.ok(bookingService.getAvailableRooms(khachSanId, checkIn, checkOut, loaiPhongId, soKhach));
     }
 
     // =====================================================

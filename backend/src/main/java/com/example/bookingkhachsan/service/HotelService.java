@@ -1,6 +1,7 @@
 package com.example.bookingkhachsan.service;
 
 import com.example.bookingkhachsan.dto.HotelDetailDto;
+import com.example.bookingkhachsan.dto.HotelSearchResultDto;
 import com.example.bookingkhachsan.entity.DanhGia;
 import com.example.bookingkhachsan.entity.DichVu;
 import com.example.bookingkhachsan.entity.KhachSan;
@@ -10,7 +11,6 @@ import com.example.bookingkhachsan.entity.NguoiDung;
 import com.example.bookingkhachsan.entity.Phong;
 import com.example.bookingkhachsan.repository.DanhGiaRepository;
 import com.example.bookingkhachsan.repository.DichVuRepository;
-import com.example.bookingkhachsan.repository.KhuyenMaiRepository;
 import com.example.bookingkhachsan.repository.PhieuDatPhongRepository;
 import com.example.bookingkhachsan.repository.PhongRepository;
 import com.example.bookingkhachsan.repository.KhachSanRepository;
@@ -38,17 +38,36 @@ public class HotelService {
     private final DanhGiaRepository danhGiaRepository;
     private final PhieuDatPhongRepository phieuDatPhongRepository;
     private final PhongRepository phongRepository;
-    private final KhuyenMaiRepository khuyenMaiRepository;
 
     private final com.example.bookingkhachsan.repository.ViTriRepository viTriRepository;
     private final com.example.bookingkhachsan.repository.TinhThanhRepository tinhThanhRepository;
     private final com.example.bookingkhachsan.repository.QuocGiaRepository quocGiaRepository;
+    private final com.example.bookingkhachsan.repository.PhongKhaDungRepository phongKhaDungRepository;
 
-    public List<KhachSan> search(Integer viTriId, Integer soSao, BigDecimal minPrice, BigDecimal maxPrice, LocalDate checkIn, LocalDate checkOut) {
-        if (checkIn == null) checkIn = LocalDate.now();
-        if (checkOut == null) checkOut = checkIn.plusDays(1);
-        
-        return khachSanRepository.findAvailableHotels(viTriId, soSao, minPrice, maxPrice, checkIn, checkOut);
+    @Transactional(readOnly = true)
+    public List<HotelSearchResultDto> search(Integer viTriId, Integer soSao, BigDecimal minPrice, BigDecimal maxPrice, LocalDate checkIn, LocalDate checkOut) {
+        LocalDate cin = checkIn != null ? checkIn : LocalDate.now();
+        LocalDate cout = checkOut != null ? checkOut : cin.plusDays(1);
+        List<KhachSan> candidates = khachSanRepository.findHotelsForSearchCards(viTriId, soSao, minPrice, maxPrice, "Ngừng hoạt động");
+        return candidates.stream()
+                .map(h -> {
+                    int n = phongKhaDungRepository.findAvailablePhongIds(h.getId(), cin, cout).size();
+                    return HotelSearchResultDto.from(h, n);
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<HotelSearchResultDto> getPublicWithAvailability(Integer limit, LocalDate checkIn, LocalDate checkOut) {
+        LocalDate cin = checkIn != null ? checkIn : LocalDate.now();
+        LocalDate cout = checkOut != null ? checkOut : cin.plusDays(1);
+        List<KhachSan> all = getAll(limit);
+        return all.stream()
+                .map(h -> {
+                    int n = phongKhaDungRepository.findAvailablePhongIds(h.getId(), cin, cout).size();
+                    return HotelSearchResultDto.from(h, n);
+                })
+                .collect(Collectors.toList());
     }
 
     public List<KhachSan> getAll(Integer limit) {
@@ -237,9 +256,6 @@ public class HotelService {
         for (Phong p : phongRepository.findByKhachSanId(id)) {
             phongRepository.delete(p);
         }
-        for (com.example.bookingkhachsan.entity.KhuyenMai km : khuyenMaiRepository.findByKhachSan_Id(id)) {
-            khuyenMaiRepository.delete(km);
-        }
         khachSanRepository.delete(hotel);
     }
 
@@ -263,6 +279,9 @@ public class HotelService {
         KhachSan hotel = getDetails(id);
         if (dto.getTiLeCoc() != null) {
             hotel.setTiLeCoc(dto.getTiLeCoc());
+        }
+        if (dto.getNguongCoc() != null) {
+            hotel.setNguongCoc(dto.getNguongCoc());
         }
         if (dto.getGioNhanPhong() != null) {
             hotel.setGioNhanPhong(dto.getGioNhanPhong());

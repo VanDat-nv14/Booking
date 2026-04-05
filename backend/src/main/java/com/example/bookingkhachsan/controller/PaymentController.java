@@ -6,6 +6,7 @@ import com.example.bookingkhachsan.entity.PhieuDatPhong;
 import com.example.bookingkhachsan.service.BookingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +30,9 @@ public class PaymentController {
 
     private final BookingService bookingService;
     private final VnPayConfig vnPayConfig;
+
+    @Value("${app.frontend.base-url:http://localhost:5173}")
+    private String frontendBaseUrl;
 
     /**
      * Tạo link thanh toán VNPAY cho một booking Pending/Confirmed chưa thanh toán.
@@ -94,17 +98,32 @@ public class PaymentController {
 
         log.info("VNPAY return params: {}", params);
 
-        String redirectBase = "http://localhost:5173/user/bookings";
-        String redirectUrl = redirectBase + "?paymentResult=fail";
+        String bookingsUrl = frontendBaseUrl + "/user/bookings";
+        String redirectUrl = bookingsUrl + "?paymentResult=fail";
 
         try {
+            String rsp = params.getOrDefault("vnp_ResponseCode", "");
+            String txnRef = params.get("vnp_TxnRef");
+
+            // Người dùng bấm "Hủy thanh toán" trên trang VNPAY
+            if ("24".equals(rsp) && txnRef != null) {
+                try {
+                    PhieuDatPhong booking = bookingService.getBookingByCode(txnRef);
+                    if (booking != null && "Pending".equalsIgnoreCase(booking.getTrangThai())) {
+                        bookingService.expireBooking(booking.getId());
+                        log.info("Booking {} expired after user cancelled VNPAY payment.", txnRef);
+                    }
+                } catch (Exception ex) {
+                    log.warn("Could not expire booking {} on VNPAY cancel: {}", txnRef, ex.getMessage());
+                }
+                return ResponseEntity.status(302).header("Location", frontendBaseUrl).build();
+            }
+
             if (!vnPayConfig.validateSignature(params)) {
                 log.warn("VNPAY signature invalid");
                 return ResponseEntity.status(302).header("Location", redirectUrl).build();
             }
 
-            String rsp = params.getOrDefault("vnp_ResponseCode", "");
-            String txnRef = params.get("vnp_TxnRef"); // maDatPhong
             String transNo = params.get("vnp_TransactionNo");
             String amountStr = params.get("vnp_Amount");
 
@@ -131,7 +150,7 @@ public class PaymentController {
                     transNo != null ? transNo : "VNPAY"
             );
 
-            redirectUrl = redirectBase + "?paymentResult=success";
+            redirectUrl = bookingsUrl + "?paymentResult=success";
         } catch (Exception e) {
             log.error("Error processing VNPAY return: {}", e.getMessage(), e);
         }
