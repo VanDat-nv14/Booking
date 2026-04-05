@@ -471,8 +471,8 @@ const BookingHistoryPage = () => {
         <BookingDetailModal
           bookingId={selectedBookingId}
           onClose={() => setSelectedBookingId(null)}
-          onCancelSuccess={(updated) => {
-            setBookings(prev => prev.map(b => b.id === updated?.id ? { ...b, ...updated } : b));
+          onCancelSuccess={() => {
+            navigate('/');
           }}
         />
       )}

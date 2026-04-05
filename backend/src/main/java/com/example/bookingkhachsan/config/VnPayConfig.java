@@ -45,25 +45,33 @@ public class VnPayConfig {
             vnpParams.put("vnp_OrderType", "other");
             vnpParams.put("vnp_Locale", "vn");
             vnpParams.put("vnp_ReturnUrl", returnUrl);
-            vnpParams.put("vnp_IpAddr", clientIp != null ? clientIp : "127.0.0.1");
+            vnpParams.put("vnp_IpAddr", (clientIp != null && !clientIp.equals("0:0:0:0:0:0:0:1")) ? clientIp : "127.0.0.1");
 
-            String createDate = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+            LocalDateTime now = LocalDateTime.now();
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+            String createDate = now.format(formatter);
             vnpParams.put("vnp_CreateDate", createDate);
 
             // Build query & hash data
             StringJoiner query = new StringJoiner("&");
             StringJoiner hashData = new StringJoiner("&");
+            
             for (Map.Entry<String, String> entry : vnpParams.entrySet()) {
-                String encodedName = URLEncoder.encode(entry.getKey(), StandardCharsets.US_ASCII);
-                String encodedValue = URLEncoder.encode(entry.getValue(), StandardCharsets.US_ASCII);
-                query.add(encodedName + "=" + encodedValue);
-                hashData.add(encodedName + "=" + encodedValue);
+                String key = entry.getKey();
+                String value = entry.getValue();
+                if (value != null && !value.isBlank()) {
+                    // hashData: key raw + value URL-encoded (spaces → '+') theo đúng chuẩn VNPAY
+                    String encodedValue = URLEncoder.encode(value, StandardCharsets.UTF_8);
+                    hashData.add(key + "=" + encodedValue);
+                    // query: dùng %20 thay + cho đẹp URL trên browser
+                    query.add(key + "=" + encodedValue.replace("+", "%20"));
+                }
             }
 
             String vnpSecureHash = hmacSHA512(hashSecret, hashData.toString());
             query.add("vnp_SecureHash=" + vnpSecureHash);
 
-            return payUrl + "?" + query;
+            return payUrl + "?" + query.toString();
         } catch (Exception e) {
             throw new RuntimeException("Không thể tạo URL thanh toán VNPAY: " + e.getMessage(), e);
         }
@@ -73,16 +81,19 @@ public class VnPayConfig {
         String receivedHash = params.get("vnp_SecureHash");
         if (receivedHash == null || receivedHash.isBlank()) return false;
 
-        Map<String, String> sorted = new TreeMap<>();
-        for (Map.Entry<String, String> e : params.entrySet()) {
-            String key = e.getKey();
-            if ("vnp_SecureHash".equals(key) || "vnp_SecureHashType".equals(key)) continue;
-            sorted.put(key, e.getValue());
-        }
+        Map<String, String> sorted = new TreeMap<>(params);
+        sorted.remove("vnp_SecureHash");
+        sorted.remove("vnp_SecureHashType");
 
         StringJoiner hashData = new StringJoiner("&");
         for (Map.Entry<String, String> entry : sorted.entrySet()) {
-            hashData.add(entry.getKey() + "=" + entry.getValue());
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (value != null && !value.isBlank()) {
+                // Spring đã URL-decode tham số. Encode lại đúng chuẩn VNPAY: key raw + value URLEncode (spaces → '+')
+                String encodedValue = URLEncoder.encode(value, StandardCharsets.UTF_8);
+                hashData.add(key + "=" + encodedValue);
+            }
         }
 
         String calculated = hmacSHA512(hashSecret, hashData.toString());

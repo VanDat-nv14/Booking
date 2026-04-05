@@ -45,6 +45,22 @@ public interface KhachSanRepository extends JpaRepository<KhachSan, Integer> {
                                        @Param("checkIn") LocalDate checkIn,
                                        @Param("checkOut") LocalDate checkOut);
 
+    /**
+     * Danh sách khách sạn theo bộ lọc (không loại KS chỉ vì hết phòng — dùng kèm đếm phòng trống riêng).
+     */
+    @Query("SELECT DISTINCT k FROM KhachSan k JOIN k.phongs p WHERE " +
+            "(:viTriId IS NULL OR k.viTri.id = :viTriId) AND " +
+            "(:soSao IS NULL OR k.soSao >= :soSao) AND " +
+            "(:minPrice IS NULL OR p.giaTien >= :minPrice) AND " +
+            "(:maxPrice IS NULL OR p.giaTien <= :maxPrice) AND " +
+            "(k.trangThai IS NULL OR k.trangThai <> :trangThaiNgung) AND " +
+            "(p.trangThai IS NULL OR p.trangThai <> 'BaoTri')")
+    List<KhachSan> findHotelsForSearchCards(@Param("viTriId") Integer viTriId,
+                                            @Param("soSao") Integer soSao,
+                                            @Param("minPrice") BigDecimal minPrice,
+                                            @Param("maxPrice") BigDecimal maxPrice,
+                                            @Param("trangThaiNgung") String trangThaiNgung);
+
     /** Load hotels with phongs in one query for map data (avoid N+1). */
     @Query("SELECT DISTINCT k FROM KhachSan k LEFT JOIN FETCH k.phongs WHERE k.viDo IS NOT NULL AND k.kinhDo IS NOT NULL")
     List<KhachSan> findAllWithPhongsForMap();

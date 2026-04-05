@@ -164,6 +164,12 @@ const ManagerDashboard = () => {
     const [editingRoom, setEditingRoom] = useState(null);
     const [roomForm, setRoomForm] = useState({ ten: '', maPhong: '', giaTien: '', loaiPhongId: '', tang: '', soPhong: '', trangThai: 'Trống' });
 
+    const [showRoomTypeModal, setShowRoomTypeModal] = useState(false);
+    const [editingRoomType, setEditingRoomType] = useState(null);
+    const [roomTypeAmenities, setRoomTypeAmenities] = useState([]);
+    const [roomTypeAmenityInput, setRoomTypeAmenityInput] = useState('');
+    const [savingRoomType, setSavingRoomType] = useState(false);
+
     const [showServiceModal, setShowServiceModal] = useState(false);
     const [editingService, setEditingService] = useState(null);
     const [serviceForm, setServiceForm] = useState({ ten: '', giaTien: '', donViTinh: 'Lần' });
@@ -197,12 +203,13 @@ const ManagerDashboard = () => {
     const [revenueYear, setRevenueYear] = useState(new Date().getFullYear());
     const [loadingRevenue, setLoadingRevenue] = useState(false);
 
-    // Promotions state
-    const [promotions, setPromotions] = useState([]);
-    const [loadingPromo, setLoadingPromo] = useState(false);
-    const [promoForm, setPromoForm] = useState({ ten: '', moTa: '', loai: 'SEASONAL', tiLeGiam: '', nganSach: '', ngayBatDau: '', ngayKetThuc: '', soLuongX: '', soLuongY: '', ghiChu: '' });
-    const [showPromoForm, setShowPromoForm] = useState(false);
-    const [editingPromo, setEditingPromo] = useState(null);
+    // Promotion codes (mã coupon của khách sạn)
+    const [promoCodes, setPromoCodes] = useState([]);
+    const [loadingPromoCodes, setLoadingPromoCodes] = useState(false);
+    const [showPromoCodeForm, setShowPromoCodeForm] = useState(false);
+    const [editingPromoCode, setEditingPromoCode] = useState(null);
+    const [promoCodeForm, setPromoCodeForm] = useState({ code: '', ten: '', moTa: '', loai: 'PERCENT', giaTri: '', giamToiDa: '', donHangToiThieu: '', soDemToiThieu: '', soLanSuDungToiDa: '', soLanToiDaMoiUser: '', ngayBatDau: '', ngayKetThuc: '' });
+    const [discountFramework, setDiscountFramework] = useState(null);
 
     // Fetch assigned hotel logic
     useEffect(() => {
@@ -274,14 +281,21 @@ const ManagerDashboard = () => {
         if (activeTab === 'services') fetchServices(silentServices);
         if (activeTab === 'revenue') fetchRevenue();
         if (activeTab === 'reviews') fetchHotelReviews();
-        if (activeTab === 'promotions') fetchPromotions();
+        if (activeTab === 'promotions') { fetchPromoCodes(); }
     }, [activeTab, myHotel, revenueYear]);
 
-    const fetchPromotions = async () => {
-        setLoadingPromo(true);
-        try { const r = await axiosClient.get('/promotions'); setPromotions(r.data); }
-        catch(e) { console.error('Lỗi tải KM:', e); }
-        finally { setLoadingPromo(false); }
+    const fetchPromoCodes = async () => {
+        setLoadingPromoCodes(true);
+        try {
+            const [rCodes, rFw] = await Promise.all([
+                axiosClient.get('/promotion-codes'),
+                axiosClient.get('/discount-framework'),
+            ]);
+            setPromoCodes(rCodes.data || []);
+            setDiscountFramework(rFw.data || null);
+        }
+        catch(e) { console.error('Lỗi tải mã coupon:', e); }
+        finally { setLoadingPromoCodes(false); }
     };
 
     const fetchRevenue = async () => {
@@ -482,7 +496,7 @@ const ManagerDashboard = () => {
                 fetchBookingDetails(id);
             }
         } catch (err) {
-            showToast(err.response?.data?.message || 'Lỗi xử lý. Vui lòng thử lại.', 'error');
+            showToast(err.response?.data?.message || err.response?.data?.error || 'Lỗi xử lý. Vui lòng thử lại.', 'error');
         } finally {
             setActionLoading(null);
         }
@@ -865,17 +879,25 @@ const ManagerDashboard = () => {
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <h3 className="font-semibold text-gray-700">Danh Sách Phòng ({rooms.length})</h3>
-                                <button
-                                    onClick={() => { setEditingRoom(null); setRoomForm({ ten: '', maPhong: '', giaTien: '', loaiPhongId: roomTypes[0]?.id || '', tang: '', soPhong: '', soKhach: '', trangThai: 'Trống' }); setShowRoomModal(true); }}
-                                    className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition">
-                                    ＋ Thêm Phòng
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => { setEditingRoomType(null); setShowRoomTypeModal(true); }}
+                                        className="px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition">
+                                        🛎️ Tiện Ích Loại Phòng
+                                    </button>
+                                    <button
+                                        onClick={() => { setEditingRoom(null); setRoomForm({ ten: '', maPhong: '', giaTien: '', loaiPhongId: roomTypes[0]?.id || '', tang: '', soPhong: '', soKhach: '', trangThai: 'Trống' }); setShowRoomModal(true); }}
+                                        className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition">
+                                        ＋ Thêm Phòng
+                                    </button>
+                                </div>
                             </div>
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                                 <table className="w-full text-sm text-left">
                                     <thead>
                                         <tr className="bg-gray-50 border-b border-gray-100 uppercase text-xs font-semibold text-gray-500">
                                             <th className="px-4 py-3">Phòng</th>
+                                            <th className="px-4 py-3">Mã Phòng</th>
                                             <th className="px-4 py-3">Loại</th>
                                             <th className="px-4 py-3">Số Khách</th>
                                             <th className="px-4 py-3">Giá Tiền</th>
@@ -888,6 +910,9 @@ const ManagerDashboard = () => {
                                             <tr key={r.id} className="hover:bg-gray-50 transition">
                                                 <td className="px-4 py-3 font-medium text-gray-800">
                                                     {r.ten} {r.soPhong ? `(${r.soPhong})` : ''}
+                                                </td>
+                                                <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                                                    {r.maPhong || '—'}
                                                 </td>
                                                 <td className="px-4 py-3 text-gray-600">
                                                     {roomTypes.find(t => t.id === r.loaiPhong?.id || t.id === r.loaiPhongId)?.ten || r.loaiPhong?.ten}
@@ -986,24 +1011,48 @@ const ManagerDashboard = () => {
                                         <p className="text-emerald-100 text-sm">{myHotel?.ten}</p>
                                     </div>
                                     <form onSubmit={handleSave} className="p-6 space-y-5">
-                                        {/* Deposit rate */}
-                                        <div className="bg-orange-50 border border-orange-100 rounded-xl p-4">
-                                            <label className="block text-sm font-bold text-orange-800 mb-1">💰 Tỷ lệ tiền cọc (%)</label>
-                                            <p className="text-xs text-gray-500 mb-3">Khách phải cọc trước khi nhận phòng với mọi hình thức thanh toán.</p>
-                                            <div className="flex items-center gap-3">
-                                                <input
-                                                    type="number"
-                                                    min="0" max="100" step="5"
-                                                    value={form.tiLeCoc ?? 30}
-                                                    onChange={e => handleChange('tiLeCoc', e.target.value)}
-                                                    className="w-28 border border-orange-200 rounded-lg px-3 py-2 text-lg font-bold text-center focus:ring-2 focus:ring-orange-400 outline-none"
-                                                />
-                                                <span className="text-2xl font-bold text-orange-600">%</span>
-                                                <span className="text-xs text-gray-500">của tổng tiền phòng</span>
+                                        {/* Deposit rate + threshold */}
+                                        <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 space-y-4">
+                                            {/* Ngưỡng cọc */}
+                                            <div>
+                                                <label className="block text-sm font-bold text-orange-800 mb-1">🎯 Ngưỡng áp dụng tiền cọc (đ)</label>
+                                                <p className="text-xs text-gray-500 mb-2">Chỉ yêu cầu cọc khi tổng tiền đơn ≥ ngưỡng này. Nhập 0 để luôn áp cọc.</p>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="number"
+                                                        min="0" step="50000"
+                                                        value={form.nguongCoc ?? 0}
+                                                        onChange={e => handleChange('nguongCoc', e.target.value)}
+                                                        className="flex-1 border border-orange-200 rounded-lg px-3 py-2 text-sm font-bold focus:ring-2 focus:ring-orange-400 outline-none"
+                                                    />
+                                                    <span className="text-sm font-semibold text-orange-600 shrink-0">VNĐ</span>
+                                                </div>
+                                                {Number(form.nguongCoc ?? 0) > 0 && (
+                                                    <p className="text-xs text-orange-600 mt-1">
+                                                        Đơn dưới {Number(form.nguongCoc).toLocaleString('vi-VN')}đ → <strong>không cọc</strong>
+                                                    </p>
+                                                )}
                                             </div>
-                                            <p className="text-xs text-orange-600 mt-2 font-medium">
-                                                Ví dụ: Phòng 1.200.000đ/đêm × 2 đêm = 2.400.000đ → Tiền cọc: {Math.round(2400000 * (form.tiLeCoc ?? 30) / 100).toLocaleString('vi-VN')}đ
-                                            </p>
+                                            {/* Tỷ lệ cọc */}
+                                            <div>
+                                                <label className="block text-sm font-bold text-orange-800 mb-1">💰 Tỷ lệ tiền cọc (%)</label>
+                                                <p className="text-xs text-gray-500 mb-2">Phần trăm tổng tiền phòng khách phải cọc trước.</p>
+                                                <div className="flex items-center gap-3">
+                                                    <input
+                                                        type="number"
+                                                        min="0" max="100" step="5"
+                                                        value={form.tiLeCoc ?? 30}
+                                                        onChange={e => handleChange('tiLeCoc', e.target.value)}
+                                                        className="w-28 border border-orange-200 rounded-lg px-3 py-2 text-lg font-bold text-center focus:ring-2 focus:ring-orange-400 outline-none"
+                                                    />
+                                                    <span className="text-2xl font-bold text-orange-600">%</span>
+                                                    <span className="text-xs text-gray-500">của tổng tiền phòng</span>
+                                                </div>
+                                                <p className="text-xs text-orange-600 mt-2 font-medium">
+                                                    Ví dụ: Đơn 2.400.000đ → Tiền cọc: {Math.round(2400000 * (form.tiLeCoc ?? 30) / 100).toLocaleString('vi-VN')}đ
+                                                    {Number(form.nguongCoc ?? 0) > 0 && Number(form.nguongCoc) > 2400000 && ' (dưới ngưỡng → không cọc)'}
+                                                </p>
+                                            </div>
                                         </div>
 
                                         {/* Check-in / Check-out times */}
@@ -1218,6 +1267,140 @@ const ManagerDashboard = () => {
                     </form>
                 </div>
             )}
+
+            {/* Room Type Amenities Modal */}
+            {showRoomTypeModal && (() => {
+                const PRESETS = [
+                    'WiFi','TV','Dieu hoa','Nha tam rieng','Tu lanh','Minibar',
+                    'Phong khach rieng','Ban lam viec','Boi','Ho boi',
+                    'TV 55inch','TV man hinh phang','Truyen hinh cap',
+                    'Voi sen','Khan tam','Do ve sinh ca nhan mien phi',
+                    'Dieu hoa khong khi','Ket an toan','May say toc',
+                    'Giu xe mien phi','Dich vu phong','Ban ui',
+                    'Tam nhin ra khung canh','Tam nhin bien',
+                    'Quat may','Dien thoai','San lat gach/da cam thach',
+                    'Khu vuc tiep khach','Khu vuc phong an','Ban an',
+                    'Tu hoac phong de quan ao','Gia treo quan ao',
+                ];
+
+                const openForType = (rt) => {
+                    setEditingRoomType(rt);
+                    setRoomTypeAmenities(rt.tienIch ? rt.tienIch.split(',').map(s => s.trim()).filter(Boolean) : []);
+                    setRoomTypeAmenityInput('');
+                };
+
+                const togglePreset = (p) => {
+                    setRoomTypeAmenities(prev =>
+                        prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
+                    );
+                };
+
+                const addCustom = () => {
+                    const val = roomTypeAmenityInput.trim();
+                    if (val && !roomTypeAmenities.includes(val)) {
+                        setRoomTypeAmenities(prev => [...prev, val]);
+                    }
+                    setRoomTypeAmenityInput('');
+                };
+
+                const handleSaveAmenities = async () => {
+                    if (!editingRoomType) return;
+                    setSavingRoomType(true);
+                    try {
+                        const updated = { ...editingRoomType, tienIch: roomTypeAmenities.join(',') };
+                        await axiosClient.put(`/room-types/${editingRoomType.id}`, updated);
+                        setRoomTypes(prev => prev.map(rt => rt.id === editingRoomType.id ? { ...rt, tienIch: updated.tienIch } : rt));
+                        setEditingRoomType({ ...editingRoomType, tienIch: updated.tienIch });
+                        showToast('Đã lưu tiện ích!');
+                    } catch {
+                        showToast('Lỗi lưu tiện ích!', 'error');
+                    } finally {
+                        setSavingRoomType(false);
+                    }
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                            <div className="px-6 py-4 border-b flex justify-between items-center">
+                                <h2 className="font-bold text-lg">🛎️ Tiện Ích Theo Loại Phòng</h2>
+                                <button type="button" onClick={() => setShowRoomTypeModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+                            </div>
+                            <div className="flex overflow-hidden flex-1 min-h-0">
+                                {/* Danh sách loại phòng */}
+                                <div className="w-44 border-r bg-gray-50 overflow-y-auto flex-shrink-0">
+                                    {roomTypes.map(rt => (
+                                        <button key={rt.id} type="button"
+                                            onClick={() => openForType(rt)}
+                                            className={`w-full text-left px-4 py-3 text-sm border-b transition ${editingRoomType?.id === rt.id ? 'bg-purple-50 text-purple-700 font-semibold' : 'hover:bg-gray-100 text-gray-700'}`}>
+                                            {rt.ten}
+                                        </button>
+                                    ))}
+                                </div>
+                                {/* Editor */}
+                                <div className="flex-1 overflow-y-auto p-5">
+                                    {!editingRoomType ? (
+                                        <div className="h-full flex items-center justify-center text-gray-400 text-sm">← Chọn loại phòng để chỉnh tiện ích</div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <p className="text-sm font-semibold text-gray-700">Loại phòng: <span className="text-purple-700">{editingRoomType.ten}</span></p>
+                                            {/* Tiện ích đã chọn */}
+                                            <div>
+                                                <p className="text-xs font-semibold text-gray-500 mb-2">Đang có ({roomTypeAmenities.length})</p>
+                                                <div className="flex flex-wrap gap-1.5 min-h-8">
+                                                    {roomTypeAmenities.map(a => (
+                                                        <span key={a} className="inline-flex items-center gap-1 bg-purple-100 text-purple-800 text-xs px-2.5 py-1 rounded-full">
+                                                            {a}
+                                                            <button type="button" onClick={() => setRoomTypeAmenities(prev => prev.filter(x => x !== a))} className="ml-0.5 text-purple-500 hover:text-purple-900 font-bold">×</button>
+                                                        </span>
+                                                    ))}
+                                                    {roomTypeAmenities.length === 0 && <span className="text-xs text-gray-400">Chưa có tiện ích nào</span>}
+                                                </div>
+                                            </div>
+                                            {/* Thêm tùy chỉnh */}
+                                            <div>
+                                                <p className="text-xs font-semibold text-gray-500 mb-2">Thêm tiện ích tùy chỉnh</p>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={roomTypeAmenityInput}
+                                                        onChange={e => setRoomTypeAmenityInput(e.target.value)}
+                                                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustom())}
+                                                        placeholder="VD: Bồn tắm jacuzzi"
+                                                        className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-400 outline-none"
+                                                    />
+                                                    <button type="button" onClick={addCustom} className="px-3 py-1.5 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700">＋</button>
+                                                </div>
+                                            </div>
+                                            {/* Preset */}
+                                            <div>
+                                                <p className="text-xs font-semibold text-gray-500 mb-2">Tiện ích phổ biến</p>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {PRESETS.map(p => (
+                                                        <button key={p} type="button" onClick={() => togglePreset(p)}
+                                                            className={`text-xs px-2.5 py-1 rounded-full border transition ${roomTypeAmenities.includes(p) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-400'}`}>
+                                                            {p}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="px-6 py-4 bg-gray-50 border-t flex justify-end gap-3">
+                                <button type="button" onClick={() => setShowRoomTypeModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Đóng</button>
+                                {editingRoomType && (
+                                    <button type="button" onClick={handleSaveAmenities} disabled={savingRoomType}
+                                        className="px-4 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50">
+                                        {savingRoomType ? 'Đang lưu...' : '💾 Lưu tiện ích'}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Service Modal */}
             {showServiceModal && (
@@ -1557,10 +1740,12 @@ const ManagerDashboard = () => {
                                                         <div className="space-y-2">
                                                             <textarea
                                                                 value={replyText[review.id] || ''}
-                                                                onChange={e => setReplyText({ ...replyText, [review.id]: e.target.value })}
+                                                                onChange={e => setReplyText({ ...replyText, [review.id]: e.target.value.slice(0, 200) })}
                                                                 placeholder="Nhập phản hồi của bạn tới khách hàng..."
+                                                                maxLength={200}
                                                                 className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none min-h-[80px] transition-all"
                                                             />
+                                                            <p className="text-right text-xs text-gray-400">{(replyText[review.id] || '').length}/200</p>
                                                             <div className="flex justify-end">
                                                                 <button
                                                                     onClick={() => handleReplySubmit(review.id)}
@@ -1775,171 +1960,276 @@ const ManagerDashboard = () => {
                 </div>
             )}
 
-                    {/* ======== PROMOTIONS ======== */}
+                    {/* ======== Khuyến Mãi ======== */}
                     {activeTab === 'promotions' && (
-                        <div className="space-y-4">
+                        <div className="space-y-5">
+                            {/* Header */}
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <h3 className="text-xl font-bold text-gray-800">🎁 Quản Lý Khuyến Mãi</h3>
-                                    <p className="text-sm text-gray-500 mt-0.5">Tạo draft → Gửi Admin duyệt → Kích hoạt</p>
+                                    <h3 className="text-xl font-bold text-gray-800">Mã Khuyến Mãi Khách Sạn</h3>
+                                    <p className="text-sm text-gray-500 mt-0.5">Tạo mã giảm giá độc quyền cho khách hàng đặt phòng tại khách sạn của bạn</p>
                                 </div>
-                                <button onClick={() => { setEditingPromo(null); setPromoForm({ ten:'',moTa:'',loai:'SEASONAL',tiLeGiam:'',nganSach:'',ngayBatDau:'',ngayKetThuc:'',soLuongX:'',soLuongY:'',ghiChu:'' }); setShowPromoForm(true); }}
-                                    className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700">＋ Tạo Khuyến Mãi</button>
+                                <button
+                                    onClick={() => { setEditingPromoCode(null); setPromoCodeForm({ code:'',ten:'',moTa:'',loai:'PERCENT',giaTri:'',giamToiDa:'',donHangToiThieu:'',soDemToiThieu:'',soLanSuDungToiDa:'',soLanToiDaMoiUser:'',ngayBatDau:'',ngayKetThuc:'' }); setShowPromoCodeForm(true); }}
+                                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition">
+                                    + Tạo Mã Khuyến Mãi
+                                </button>
                             </div>
 
-                            {/* Workflow guide */}
-                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-6 text-sm">
-                                {[['1. DRAFT','Bạn tạo nháp','bg-gray-200 text-gray-700'],['2. PENDING','Gửi Admin duyệt','bg-yellow-200 text-yellow-800'],['3. APPROVED','Admin duyệt','bg-green-200 text-green-800'],['4. ACTIVE','Đang chạy','bg-emerald-600 text-white']].map(([step,desc,cls])=>(
-                                    <div key={step} className="flex items-center gap-2">
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${cls}`}>{step}</span>
-                                        <span className="text-gray-600 hidden sm:block">{desc}</span>
-                                    </div>
-                                ))}
-                                <div className="ml-auto text-xs text-emerald-700">💡 Ngân sách &gt; 10 triệu cần Admin duyệt thủ công</div>
-                            </div>
-
-                            {loadingPromo ? <div className="py-16 flex justify-center"><div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"/></div> : (
-                                <div className="space-y-3">
-                                    {promotions.map(p => (
-                                        <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition">
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="font-mono text-xs text-gray-400">{p.id}</span>
-                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${p.trangThai==='ACTIVE'?'bg-emerald-100 text-emerald-700':p.trangThai==='APPROVED'?'bg-green-100 text-green-700':p.trangThai==='PENDING_APPROVAL'?'bg-yellow-100 text-yellow-700':p.trangThai==='REJECTED'?'bg-red-100 text-red-700':'bg-gray-100 text-gray-600'}`}>{p.trangThai}</span>
-                                                        <span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">{p.loai}</span>
-                                                    </div>
-                                                    <p className="font-semibold text-gray-800">{p.ten}</p>
-                                                    <p className="text-sm text-gray-500 mt-0.5">{p.moTa}</p>
-                                                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                                                        {p.tiLeGiam && <span>Giảm: <strong>{p.tiLeGiam}%</strong></span>}
-                                                        {p.nganSach && <span>Ngân sách: <strong>{new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(p.nganSach)}</strong></span>}
-                                                        <span>{p.ngayBatDau} → {p.ngayKetThuc}</span>
-                                                    </div>
-                                                    {p.lyDoTuChoi && <p className="mt-2 text-xs text-red-600 bg-red-50 rounded p-2">Lý do từ chối: {p.lyDoTuChoi}</p>}
-                                                </div>
-                                                <div className="flex gap-2 ml-4 flex-shrink-0 flex-wrap justify-end">
-                                                    {p.trangThai === 'DRAFT' && (
-                                                        <>
-                                                            <button onClick={async () => {
-                                                                try { await axiosClient.put(`/promotions/${p.id}/submit`); showToast('Gửi duyệt thành công!'); fetchPromotions(); }
-                                                                catch(e) { showToast(e.response?.data?.message||'Lỗi gửi duyệt','error'); }
-                                                            }} className="px-3 py-1.5 bg-yellow-500 text-white text-xs font-semibold rounded-lg hover:bg-yellow-600">Gửi Duyệt</button>
-                                                            <button onClick={() => { setEditingPromo(p); setPromoForm({ten:p.ten,moTa:p.moTa||'',loai:p.loai,tiLeGiam:p.tiLeGiam||'',nganSach:p.nganSach||'',ngayBatDau:p.ngayBatDau,ngayKetThuc:p.ngayKetThuc,soLuongX:p.soLuongX||'',soLuongY:p.soLuongY||'',ghiChu:p.ghiChu||''}); setShowPromoForm(true); }}
-                                                                className="px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50">Sửa</button>
-                                                            <button onClick={async () => {
-                                                                if(!window.confirm(`Xóa khuyen mãi "${p.ten}"?`)) return;
-                                                                try { await axiosClient.delete(`/promotions/${p.id}`); showToast('Xóa thành công!'); fetchPromotions(); }
-                                                                catch(e) { showToast(e.response?.data?.message||'Lỗi xóa','error'); }
-                                                            }} className="px-3 py-1.5 border border-red-200 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-50">Xóa</button>
-                                                        </>
-                                                    )}
-                                                    {p.trangThai === 'REJECTED' && (
-                                                        <>
-                                                            <button onClick={() => { setEditingPromo(p); setPromoForm({ten:p.ten,moTa:p.moTa||'',loai:p.loai,tiLeGiam:p.tiLeGiam||'',nganSach:p.nganSach||'',ngayBatDau:p.ngayBatDau,ngayKetThuc:p.ngayKetThuc,soLuongX:p.soLuongX||'',soLuongY:p.soLuongY||'',ghiChu:p.ghiChu||''}); setShowPromoForm(true); }}
-                                                                className="px-3 py-1.5 border border-blue-200 text-blue-600 text-xs font-semibold rounded-lg hover:bg-blue-50">Chỉnh Sửa Lại</button>
-                                                            <button onClick={async () => {
-                                                                if(!window.confirm(`Xóa khuyen mãi "${p.ten}"?`)) return;
-                                                                try { await axiosClient.delete(`/promotions/${p.id}`); showToast('Xóa thành công!'); fetchPromotions(); }
-                                                                catch(e) { showToast(e.response?.data?.message||'Lỗi xóa','error'); }
-                                                            }} className="px-3 py-1.5 border border-red-200 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-50">Xóa</button>
-                                                        </>
-                                                    )}
-                                                    {/* Admin approve/reject for PENDING */}
-                                                    {p.trangThai === 'PENDING_APPROVAL' && (user?.role === 'Admin' || user?.role === 'ADMIN') && (
-                                                        <>
-                                                            <button onClick={async () => {
-                                                                try { await axiosClient.put(`/promotions/${p.id}/review`, { approved: true }); showToast('Duyệt thành công!'); fetchPromotions(); }
-                                                                catch(e) { showToast(e.response?.data?.message||'Lỗi duyệt','error'); }
-                                                            }} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700">Duyệt</button>
-                                                            <button onClick={async () => {
-                                                                const ly_do = prompt('Lý do từ chối:');
-                                                                if (ly_do === null) return;
-                                                                try { await axiosClient.put(`/promotions/${p.id}/review`, { approved: false, lyDoTuChoi: ly_do }); showToast('Từ chối!'); fetchPromotions(); }
-                                                                catch(e) { showToast(e.response?.data?.message||'Lỗi từ chối','error'); }
-                                                            }} className="px-3 py-1.5 border border-red-200 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-50">Từ Chối</button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {promotions.length === 0 && (
-                                        <div className="bg-white rounded-xl p-16 text-center text-gray-400">
-                                            <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" /></svg>
-                                            <p className="font-medium">Chưa có khuyến mãi nào. Hãy tạo khuyến mãi đầu tiên!</p>
-                                        </div>
-                                    )}
+                            {/* DiscountFramework info banner */}
+                            {discountFramework && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex flex-wrap gap-5 text-sm">
+                                    <span className="font-semibold text-amber-800">Giới hạn hệ thống:</span>
+                                    {discountFramework.phanTramToiThieu != null && <span className="text-amber-700">% giảm tối thiểu: <strong>{discountFramework.phanTramToiThieu}%</strong></span>}
+                                    {discountFramework.phanTramToiDa != null && <span className="text-amber-700">% giảm tối đa: <strong>{discountFramework.phanTramToiDa}%</strong></span>}
+                                    {discountFramework.soTienToiDa != null && <span className="text-amber-700">FIXED tối đa: <strong>{new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(discountFramework.soTienToiDa)}</strong></span>}
+                                    {discountFramework.donHangToiThieuBatBuoc != null && <span className="text-amber-700">Đơn tối thiểu bắt buộc: <strong>{new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(discountFramework.donHangToiThieuBatBuoc)}</strong></span>}
                                 </div>
                             )}
 
-                            {/* Create/Edit Promotion Modal */}
-                            {showPromoForm && (
-                                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowPromoForm(false)}>
-                                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                                        <div className="flex items-center justify-between px-6 py-4 border-b">
-                                            <h3 className="font-bold text-gray-800">🎁 {editingPromo ? 'Chỉnh Sửa' : 'Tạo'} Khuyến Mãi</h3>
-                                            <button onClick={() => setShowPromoForm(false)} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+                            {/* Promo code list */}
+                            {loadingPromoCodes ? (
+                                <div className="py-12 flex justify-center"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"/></div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {promoCodes.length === 0 && (
+                                        <div className="bg-white rounded-xl p-14 text-center text-gray-400 border border-dashed border-gray-200">
+                                            <div className="text-4xl mb-3">🎟️</div>
+                                            <p className="font-semibold text-gray-500">Chưa có mã khuyến mãi nào</p>
+                                            <p className="text-sm mt-1">Tạo mã để khách nhập khi đặt phòng và nhận ưu đãi!</p>
                                         </div>
-                                        <div className="p-6 space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="col-span-2">
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Tên khuyến mãi *</label>
-                                                    <input value={promoForm.ten} onChange={e=>setPromoForm(f=>({...f,ten:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="VD: Giảm 20% mùa hè 2025"/>
-                                                </div>
-                                                <div className="col-span-2">
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Mô tả</label>
-                                                    <textarea value={promoForm.moTa} onChange={e=>setPromoForm(f=>({...f,moTa:e.target.value}))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="Mô tả chi tiết chương trình..."/>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Loại *</label>
-                                                    <select value={promoForm.loai} onChange={e=>setPromoForm(f=>({...f,loai:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
-                                                        <option value="SEASONAL">SEASONAL (Theo mùa)</option>
-                                                        <option value="COMBO">COMBO</option>
-                                                        <option value="BUY_X_GET_Y">BUY X GET Y</option>
-                                                        <option value="FLASH_SALE">FLASH SALE</option>
-                                                        <option value="LOYALTY">LOYALTY</option>
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Tỉ lệ giảm (%)</label>
-                                                    <input type="number" value={promoForm.tiLeGiam} onChange={e=>setPromoForm(f=>({...f,tiLeGiam:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="20"/>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Ngân sách (VNĐ)</label>
-                                                    <input type="number" value={promoForm.nganSach} onChange={e=>setPromoForm(f=>({...f,nganSach:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="5000000"/>
-                                                    {parseFloat(promoForm.nganSach) > 10000000 && <p className="text-xs text-orange-600 mt-1">⚠️ Ngân sách &gt; 10 triệu → Admin duyệt thủ công</p>}
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu *</label>
-                                                    <input type="date" value={promoForm.ngayBatDau} onChange={e=>setPromoForm(f=>({...f,ngayBatDau:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"/>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Ngày kết thúc *</label>
-                                                    <input type="date" value={promoForm.ngayKetThuc} onChange={e=>setPromoForm(f=>({...f,ngayKetThuc:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"/>
-                                                </div>
-                                                {promoForm.loai === 'BUY_X_GET_Y' && (<>
-                                                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Mua X đêm</label>
-                                                        <input type="number" value={promoForm.soLuongX} onChange={e=>setPromoForm(f=>({...f,soLuongX:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="2"/></div>
-                                                    <div><label className="block text-xs font-semibold text-gray-600 mb-1">Tặng Y đêm</label>
-                                                        <input type="number" value={promoForm.soLuongY} onChange={e=>setPromoForm(f=>({...f,soLuongY:e.target.value}))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" placeholder="1"/></div>
-                                                </>)}
-                                                <div className="col-span-2">
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Ghi chú cho Admin</label>
-                                                    <textarea value={promoForm.ghiChu} onChange={e=>setPromoForm(f=>({...f,ghiChu:e.target.value}))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="Lý do cần phê duyệt, mục tiêu..."/>
+                                    )}
+                                    {promoCodes.map(pc => {
+                                        const vnd = (v) => new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(v);
+                                        const isActive = pc.trangThai === 'ACTIVE';
+                                        const isExpired = pc.ngayKetThuc && new Date(pc.ngayKetThuc) < new Date();
+                                        const usagePct = pc.soLanSuDungToiDa ? Math.min(100, Math.round(((pc.soLanDaDung||0)/pc.soLanSuDungToiDa)*100)) : null;
+                                        return (
+                                            <div key={pc.id} className={`bg-white rounded-xl border shadow-sm p-5 transition hover:shadow-md ${isActive && !isExpired ? 'border-gray-100' : 'border-gray-200 opacity-70'}`}>
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="flex-1 min-w-0">
+                                                        {/* Top row: code + badges */}
+                                                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                            <span className="font-mono font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-lg text-sm tracking-wider">{pc.code}</span>
+                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                                                                {isActive ? 'Đang hoạt động' : 'Tắt'}
+                                                            </span>
+                                                            {isExpired && <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-600">Hết hạn</span>}
+                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${pc.loai==='PERCENT'?'bg-indigo-100 text-indigo-700':'bg-orange-100 text-orange-700'}`}>
+                                                                {pc.loai==='PERCENT'?'Phần trăm':'Cố định'}
+                                                            </span>
+                                                        </div>
+                                                        {/* Name */}
+                                                        <p className="font-semibold text-gray-800">{pc.ten || '(Chưa đặt tên)'}</p>
+                                                        {pc.moTa && <p className="text-xs text-gray-400 mt-0.5 truncate">{pc.moTa}</p>}
+                                                        {/* Stats row */}
+                                                        <div className="flex flex-wrap gap-4 mt-3 text-xs text-gray-500">
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="text-gray-400">Giảm:</span>
+                                                                <strong className="text-blue-700 text-sm">{pc.loai==='PERCENT'?`${pc.giaTri}%`:vnd(pc.giaTri)}</strong>
+                                                                {pc.loai==='PERCENT' && pc.giamToiDa && <span className="text-gray-400">(tối đa {vnd(pc.giamToiDa)})</span>}
+                                                            </div>
+                                                            {pc.donHangToiThieu && <div><span className="text-gray-400">Đơn tối thiểu:</span> <strong>{vnd(pc.donHangToiThieu)}</strong></div>}
+                                                            {pc.soDemToiThieu && <div><span className="text-gray-400">Đêm tối thiểu:</span> <strong>{pc.soDemToiThieu} đêm</strong></div>}
+                                                            <div><span className="text-gray-400">Hiệu lực:</span> <strong>{pc.ngayBatDau}</strong> → <strong>{pc.ngayKetThuc}</strong></div>
+                                                        </div>
+                                                        {/* Usage progress */}
+                                                        {pc.soLanSuDungToiDa && (
+                                                            <div className="mt-3">
+                                                                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                                                                    <span>Lượt sử dụng</span>
+                                                                    <span>{pc.soLanDaDung||0} / {pc.soLanSuDungToiDa}</span>
+                                                                </div>
+                                                                <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                                                    <div className={`h-1.5 rounded-full transition-all ${usagePct >= 90 ? 'bg-red-500' : usagePct >= 60 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{width:`${usagePct}%`}}/>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    {/* Actions */}
+                                                    <div className="flex flex-col gap-2 flex-shrink-0">
+                                                        <button
+                                                            onClick={() => { setEditingPromoCode(pc); setPromoCodeForm({ code:pc.code,ten:pc.ten||'',moTa:pc.moTa||'',loai:pc.loai,giaTri:pc.giaTri||'',giamToiDa:pc.giamToiDa||'',donHangToiThieu:pc.donHangToiThieu||'',soDemToiThieu:pc.soDemToiThieu||'',soLanSuDungToiDa:pc.soLanSuDungToiDa||'',soLanToiDaMoiUser:pc.soLanToiDaMoiUser||'',ngayBatDau:pc.ngayBatDau||'',ngayKetThuc:pc.ngayKetThuc||'' }); setShowPromoCodeForm(true); }}
+                                                            className="px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50 transition">
+                                                            Chỉnh sửa
+                                                        </button>
+                                                        <button
+                                                            onClick={async () => {
+                                                                try {
+                                                                    await axiosClient.put(`/promotion-codes/${pc.id}`, { trangThai: isActive ? 'INACTIVE' : 'ACTIVE' });
+                                                                    showToast(isActive ? 'Đã tắt mã!' : 'Đã bật mã!');
+                                                                    fetchPromoCodes();
+                                                                } catch(e) { showToast(e.response?.data?.error || e.response?.data?.message || 'Lỗi cập nhật', 'error'); }
+                                                            }}
+                                                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${isActive ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}>
+                                                            {isActive ? 'Tắt' : 'Bật'}
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div className="flex justify-end gap-3 pt-2 border-t">
-                                                <button onClick={() => setShowPromoForm(false)} className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50">Hủy</button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Create/Edit PromoCode Modal */}
+                            {showPromoCodeForm && (
+                                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowPromoCodeForm(false)}>
+                                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                                        {/* Modal header */}
+                                        <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50 rounded-t-2xl">
+                                            <div>
+                                                <h3 className="font-bold text-gray-800 text-base">
+                                                    {editingPromoCode ? 'Chỉnh Sửa Mã Khuyến Mãi' : 'Tạo Mã Khuyến Mãi Mới'}
+                                                </h3>
+                                                {editingPromoCode && <p className="text-xs text-gray-500 mt-0.5">Mã: <span className="font-mono font-bold text-blue-700">{editingPromoCode.code}</span></p>}
+                                            </div>
+                                            <button onClick={() => setShowPromoCodeForm(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+                                        </div>
+
+                                        {/* Framework limits hint inside modal */}
+                                        {discountFramework && !editingPromoCode && (
+                                            <div className="mx-6 mt-5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
+                                                <p className="font-semibold mb-1">Quy định hệ thống (bắt buộc tuân theo):</p>
+                                                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                                    {discountFramework.phanTramToiThieu != null && <span>% giảm: từ <strong>{discountFramework.phanTramToiThieu}%</strong></span>}
+                                                    {discountFramework.phanTramToiDa != null && <span>đến <strong>{discountFramework.phanTramToiDa}%</strong></span>}
+                                                    {discountFramework.soTienToiDa != null && <span>FIXED tối đa: <strong>{new Intl.NumberFormat('vi-VN').format(discountFramework.soTienToiDa)} ₫</strong></span>}
+                                                    {discountFramework.donHangToiThieuBatBuoc != null && <span>Đơn hàng tối thiểu: <strong>{new Intl.NumberFormat('vi-VN').format(discountFramework.donHangToiThieuBatBuoc)} ₫</strong></span>}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="p-6 space-y-5">
+                                            {/* Section 1: Basic info */}
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Thông tin cơ bản</p>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Mã code * <span className="font-normal text-gray-400">(viết hoa, không dấu)</span></label>
+                                                        <input value={promoCodeForm.code} onChange={e=>setPromoCodeForm(f=>({...f,code:e.target.value.toUpperCase()}))} disabled={!!editingPromoCode}
+                                                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 font-mono disabled:bg-gray-50 disabled:text-gray-400" placeholder="VD: GIAM10KS"/>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Tên mã *</label>
+                                                        <input value={promoCodeForm.ten} onChange={e=>setPromoCodeForm(f=>({...f,ten:e.target.value}))}
+                                                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="VD: Giảm cho khách hàng mới"/>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Section 2: Discount value */}
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Giá trị giảm</p>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Loại giảm *</label>
+                                                        <select value={promoCodeForm.loai} onChange={e=>setPromoCodeForm(f=>({...f,loai:e.target.value}))} disabled={!!editingPromoCode}
+                                                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50">
+                                                            <option value="PERCENT">PERCENT — Phần trăm (%)</option>
+                                                            <option value="FIXED">FIXED — Số tiền cố định (₫)</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">
+                                                            Giá trị giảm * {promoCodeForm.loai==='PERCENT' ? '(%)' : '(₫)'}
+                                                        </label>
+                                                        <input type="number" min="0" value={promoCodeForm.giaTri} onChange={e=>setPromoCodeForm(f=>({...f,giaTri:e.target.value}))} disabled={!!editingPromoCode}
+                                                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50"
+                                                            placeholder={promoCodeForm.loai==='PERCENT' ? (discountFramework ? `${discountFramework.phanTramToiThieu}–${discountFramework.phanTramToiDa}` : '10') : '500000'}/>
+                                                        {promoCodeForm.loai==='PERCENT' && discountFramework && (
+                                                            <p className="text-xs text-amber-600 mt-0.5">{discountFramework.phanTramToiThieu}% – {discountFramework.phanTramToiDa}%</p>
+                                                        )}
+                                                        {promoCodeForm.loai==='FIXED' && discountFramework?.soTienToiDa && (
+                                                            <p className="text-xs text-amber-600 mt-0.5">Tối đa {new Intl.NumberFormat('vi-VN').format(discountFramework.soTienToiDa)} ₫</p>
+                                                        )}
+                                                    </div>
+                                                    {promoCodeForm.loai==='PERCENT' && (
+                                                        <div>
+                                                            <label className="block text-xs font-semibold text-gray-600 mb-1">Giảm tối đa (₫) <span className="font-normal text-gray-400">— tùy chọn</span></label>
+                                                            <input type="number" min="0" value={promoCodeForm.giamToiDa} onChange={e=>setPromoCodeForm(f=>({...f,giamToiDa:e.target.value}))}
+                                                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="VD: 500000"/>
+                                                        </div>
+                                                    )}
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Đơn hàng tối thiểu * (₫)</label>
+                                                        <input type="number" min="0" value={promoCodeForm.donHangToiThieu} onChange={e=>setPromoCodeForm(f=>({...f,donHangToiThieu:e.target.value}))}
+                                                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                                                            placeholder={discountFramework?.donHangToiThieuBatBuoc ? String(discountFramework.donHangToiThieuBatBuoc) : '500000'}/>
+                                                        {discountFramework?.donHangToiThieuBatBuoc && (
+                                                            <p className="text-xs text-amber-600 mt-0.5">Tối thiểu {new Intl.NumberFormat('vi-VN').format(discountFramework.donHangToiThieuBatBuoc)} ₫</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Section 3: Conditions */}
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Điều kiện & Giới hạn</p>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Số đêm tối thiểu <span className="font-normal text-gray-400">— tùy chọn</span></label>
+                                                        <input type="number" min="1" value={promoCodeForm.soDemToiThieu} onChange={e=>setPromoCodeForm(f=>({...f,soDemToiThieu:e.target.value}))}
+                                                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="VD: 2"/>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Tổng lượt dùng tối đa <span className="font-normal text-gray-400">— tùy chọn</span></label>
+                                                        <input type="number" min="1" value={promoCodeForm.soLanSuDungToiDa} onChange={e=>setPromoCodeForm(f=>({...f,soLanSuDungToiDa:e.target.value}))}
+                                                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="VD: 100"/>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Lượt dùng/người tối đa <span className="font-normal text-gray-400">— tùy chọn</span></label>
+                                                        <input type="number" min="1" value={promoCodeForm.soLanToiDaMoiUser} onChange={e=>setPromoCodeForm(f=>({...f,soLanToiDaMoiUser:e.target.value}))}
+                                                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="VD: 1"/>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Section 4: Date range */}
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Thời gian hiệu lực</p>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Ngày bắt đầu *</label>
+                                                        <input type="date" value={promoCodeForm.ngayBatDau} onChange={e=>setPromoCodeForm(f=>({...f,ngayBatDau:e.target.value}))} disabled={!!editingPromoCode}
+                                                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50"/>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Ngày kết thúc *</label>
+                                                        <input type="date" value={promoCodeForm.ngayKetThuc} onChange={e=>setPromoCodeForm(f=>({...f,ngayKetThuc:e.target.value}))}
+                                                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"/>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Description */}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Mô tả <span className="font-normal text-gray-400">— tùy chọn</span></label>
+                                                <textarea value={promoCodeForm.moTa} onChange={e=>setPromoCodeForm(f=>({...f,moTa:e.target.value}))} rows={2}
+                                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="Mô tả điều kiện áp dụng..."/>
+                                            </div>
+
+                                            {/* Footer buttons */}
+                                            <div className="flex justify-end gap-3 pt-3 border-t">
+                                                <button onClick={() => setShowPromoCodeForm(false)} className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 transition">Hủy</button>
                                                 <button onClick={async () => {
                                                     try {
-                                                        const payload = { ...promoForm, tiLeGiam: promoForm.tiLeGiam?parseFloat(promoForm.tiLeGiam):null, nganSach: promoForm.nganSach?parseFloat(promoForm.nganSach):null, soLuongX: promoForm.soLuongX?parseInt(promoForm.soLuongX):null, soLuongY: promoForm.soLuongY?parseInt(promoForm.soLuongY):null, khachSanId: myHotel?.id };
-                                                        if (editingPromo) { await axiosClient.put(`/promotions/${editingPromo.id}`, payload); showToast('Đã cập nhật khuyến mãi!'); }
-                                                        else { await axiosClient.post('/promotions', payload); showToast('Tạo khuyến mãi thành công!'); }
-                                                        setShowPromoForm(false); fetchPromotions();
-                                                    } catch(e) { showToast(e.response?.data?.message||'Lỗi lưu khuyến mãi','error'); }
-                                                }} className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700">
-                                                    {editingPromo ? 'Cập Nhật' : 'Lưu Nháp'}
+                                                        const parse = (v) => v===''||v===null||v===undefined ? null : parseFloat(v);
+                                                        const parseI = (v) => v===''||v===null||v===undefined ? null : parseInt(v);
+                                                        if (editingPromoCode) {
+                                                            const upd = { ten:promoCodeForm.ten, moTa:promoCodeForm.moTa, giamToiDa:parse(promoCodeForm.giamToiDa), donHangToiThieu:parse(promoCodeForm.donHangToiThieu), soDemToiThieu:parseI(promoCodeForm.soDemToiThieu), soLanSuDungToiDa:parseI(promoCodeForm.soLanSuDungToiDa), soLanToiDaMoiUser:parseI(promoCodeForm.soLanToiDaMoiUser), ngayKetThuc:promoCodeForm.ngayKetThuc||null };
+                                                            await axiosClient.put(`/promotion-codes/${editingPromoCode.id}`, upd);
+                                                            showToast('Cập nhật mã khuyến mãi thành công!');
+                                                        } else {
+                                                            const payload = { code:promoCodeForm.code, ten:promoCodeForm.ten, moTa:promoCodeForm.moTa, loai:promoCodeForm.loai, giaTri:parse(promoCodeForm.giaTri), giamToiDa:parse(promoCodeForm.giamToiDa), donHangToiThieu:parse(promoCodeForm.donHangToiThieu), soDemToiThieu:parseI(promoCodeForm.soDemToiThieu), soLanSuDungToiDa:parseI(promoCodeForm.soLanSuDungToiDa), soLanToiDaMoiUser:parseI(promoCodeForm.soLanToiDaMoiUser), ngayBatDau:promoCodeForm.ngayBatDau||null, ngayKetThuc:promoCodeForm.ngayKetThuc||null, khachSanId:myHotel?.id };
+                                                            await axiosClient.post('/promotion-codes', payload);
+                                                            showToast('Tạo mã khuyến mãi thành công!');
+                                                        }
+                                                        setShowPromoCodeForm(false);
+                                                        fetchPromoCodes();
+                                                    } catch(e) { showToast(e.response?.data?.error || e.response?.data?.message || 'Lỗi lưu mã', 'error'); }
+                                                }} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition">
+                                                    {editingPromoCode ? 'Lưu thay đổi' : 'Tạo Mã'}
                                                 </button>
                                             </div>
                                         </div>

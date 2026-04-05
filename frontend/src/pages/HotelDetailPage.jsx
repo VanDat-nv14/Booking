@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axiosClient from '../api/axiosClient';
@@ -51,6 +51,13 @@ const fmtDate = (dt) => { if (!dt) return ''; const d = new Date(dt); return d.t
 
 const wordCountVi = (s) => ((s || '').trim().split(/\s+/).filter(Boolean).length);
 
+/** Hiển thị một dòng ưu đãi (API /coupons/public) */
+const offerLabel = (o) => {
+  if (!o) return '';
+  if (o.loai === 'PERCENT') return `Giảm ${o.giaTri}%`;
+  return `Giảm ${fmt(Number(o.giaTri || 0))}`;
+};
+
 // Map component handle 
 const MapUpdater = ({ center }) => {
   const map = useMap();
@@ -71,12 +78,69 @@ const StarRating = ({ stars, className = '', small }) => (
   </span>
 );
 
+const AMENITY_ICONS = {
+  'wifi': '📶', 'wi-fi': '📶', 'wifi mien phi': '📶',
+  'tv': '📺', 'tv man hinh phang': '📺', 'tv 55inch': '📺', 'truyen hinh cap': '📺',
+  'dieu hoa': '❄️', 'dieu hoa khong khi': '❄️',
+  'nha tam rieng': '🚿', 'phong tam rieng': '🚿', 'voi sen': '🚿',
+  'boi': '🏊', 'ho boi': '🏊',
+  'minibar': '🍷', 'tu lanh': '🧊',
+  'phong khach rieng': '🛋️', 'khu vuc tiep khach': '🛋️',
+  'ban lam viec': '💻', 'ban an': '🍽️',
+  'gia treo quan ao': '🧥', 'tu hoac phong de quan ao': '🧥',
+  'khan tam': '🛁', 'do ve sinh ca nhan mien phi': '🧴',
+  'san lat gach': '🪟', 'san lat gach/da cam thach': '🪟',
+  'tam nhin ra khung canh': '🌅', 'tam nhin bien': '🌊',
+  'dien thoai': '📞', 'ket an toan': '🔒',
+  'may say toc': '💇', 'ban ui': '🧺',
+  'quat may': '🌀', 'may nuoc nong': '♨️',
+  'giu xe mien phi': '🅿️', 'dich vu phong': '🛎️',
+};
+
+const getAmenityIcon = (name) => {
+  const key = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+  for (const [k, icon] of Object.entries(AMENITY_ICONS)) {
+    if (key.includes(k)) return icon;
+  }
+  return '✓';
+};
+
 const AmenityBadge = ({ name }) => (
   <span className="inline-flex items-center gap-1.5 bg-slate-50 text-slate-700 text-xs px-2.5 py-1 rounded-full border border-slate-200/80">
-    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+    <span className="shrink-0">{getAmenityIcon(name)}</span>
     {name}
   </span>
 );
+
+const AmenityList = ({ amenities }) => {
+  const SHOW = 5;
+  const [expanded, setExpanded] = useState(false);
+  if (!amenities || amenities.length === 0) return null;
+  const visible = expanded ? amenities : amenities.slice(0, SHOW);
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap gap-1.5">
+        {visible.map(a => <AmenityBadge key={a} name={a} />)}
+      </div>
+      {amenities.length > SHOW && (
+        <button type="button"
+          onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+          className="mt-2 text-xs text-blue-600 hover:underline">
+          {expanded ? 'Thu gọn' : `+${amenities.length - SHOW} tiện ích khác`}
+        </button>
+      )}
+      {expanded && (
+        <div className="mt-3 pt-2 border-t border-slate-100 grid grid-cols-2 gap-x-4 gap-y-1">
+          {amenities.map(a => (
+            <span key={a} className="text-xs text-gray-600 flex items-center gap-1.5">
+              <span className="text-green-500 font-bold">✓</span> {a}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const PolicyBadge = ({ choPhepHuy, mienPhiHuyTruocGio, phiHuyPct }) => {
   if (!choPhepHuy) return <span className="text-xs text-red-700 font-medium bg-red-50 px-2 py-1 rounded border border-red-100">Không hoàn tiền</span>;
@@ -632,6 +696,11 @@ const HotelDetailPage = () => {
   const [toastMsg, setToastMsg]           = useState(null);
   const [bookingResult, setBookingResult] = useState(null);
 
+  const [publicCoupons, setPublicCoupons] = useState({ platformDiscounts: [], hotelPromotions: [] });
+  const [couponCode, setCouponCode] = useState('');
+  const [couponPreview, setCouponPreview] = useState(null);
+  const [couponApplying, setCouponApplying] = useState(false);
+
   // Active tab (info / rooms / reviews)
   const [activeTab, setActiveTab] = useState('info');
   const roomsSectionRef = useRef(null);
@@ -643,21 +712,42 @@ const HotelDetailPage = () => {
       .finally(() => setLoadingHotel(false));
   }, [id]);
 
-  const searchRooms = useCallback(async () => {
+  // Tự động tìm phòng trống khi vào trang
+  useEffect(() => {
+    searchRooms();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    axiosClient.get(`/coupons/public/hotel/${id}`)
+      .then((r) => setPublicCoupons(r.data || { platformDiscounts: [], hotelPromotions: [] }))
+      .catch(() => setPublicCoupons({ platformDiscounts: [], hotelPromotions: [] }));
+  }, [id]);
+
+  useEffect(() => {
+    setCouponPreview(null);
+  }, [selectedRoom?.phongId]);
+
+  // Nếu phòng có tiền cọc → bắt buộc thanh toán online (VNPAY)
+  useEffect(() => {
+    if (selectedRoom && Number(selectedRoom.tienCocDuTinh || 0) > 0) {
+      setPayMethod('VNPAY');
+    }
+  }, [selectedRoom?.phongId]);
+
+  const searchRooms = useCallback(async ({ scroll = false } = {}) => {
     if (!checkIn || !checkOut || nights(checkIn, checkOut) < 1) {
       showToast('Ngày đến phải trước ngày đi!', 'error'); return;
     }
     setSearching(true);
     setSelectedRoom(null);
     try {
-      const res = await axiosClient.get(`/hotels/${id}/available-rooms`, { params: { checkIn, checkOut } });
-      const rooms = (res.data || []).filter(r => r.soKhach >= guests);
+      const res = await axiosClient.get(`/hotels/${id}/available-rooms`, { params: { checkIn, checkOut, soKhach: guests } });
+      const rooms = (res.data || []).filter(r => r.soKhach == null || r.soKhach >= guests);
       setAvailableRooms(rooms);
       setSearched(true);
       setActiveTab('rooms');
       if (rooms.length === 0) showToast('Không còn phòng trống trong khoảng thời gian này.', 'warn');
-      /* Luôn cuộn tới khu vực phòng — trước đây chỉ cuộn khi có phòng nên người dùng tưởng “chưa load” nếu không kéo xuống */
-      setTimeout(() => roomsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+      if (scroll) setTimeout(() => roomsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
     } catch {
       showToast('Lỗi khi tìm phòng. Vui lòng thử lại.', 'error');
     } finally {
@@ -665,12 +755,48 @@ const HotelDetailPage = () => {
     }
   }, [id, checkIn, checkOut, guests]);
 
+  const soNgay = nights(checkIn, checkOut);
+
+  const applyCoupon = async () => {
+    if (!selectedRoom) {
+      showToast('Chọn phòng trước khi áp dụng mã.', 'warn');
+      return;
+    }
+    const code = (couponCode || '').trim();
+    if (!code) {
+      showToast('Nhập mã giảm giá hoặc khuyến mãi.', 'warn');
+      return;
+    }
+    setCouponApplying(true);
+    try {
+      const res = await axiosClient.post('/coupons/preview', {
+        code,
+        orderAmount: selectedRoom.tongTienDuTinh,
+        hotelId: Number(id),
+        loaiPhongId: selectedRoom.loaiPhongId,
+        nights: soNgay,
+      });
+      setCouponPreview(res.data);
+      if (res.data?.valid) {
+        showToast(`Áp dụng mã thành công · ${res.data.kind === 'DISCOUNT' ? 'Mã nền tảng' : 'Mã khách sạn'}`, 'success');
+      } else {
+        showToast(res.data?.message || 'Mã không hợp lệ.', 'error');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Không kiểm tra được mã.';
+      setCouponPreview({ valid: false, message: msg, discountAmount: 0, kind: '' });
+      showToast(msg, 'error');
+    } finally {
+      setCouponApplying(false);
+    }
+  };
+
   const handleBook = async () => {
     if (!user) { navigate('/login', { state: { from: window.location.pathname } }); return; }
     if (!selectedRoom) { showToast('Vui lòng chọn phòng!', 'error'); return; }
     setBooking(true);
     try {
-      const res = await axiosClient.post('/bookings/create', {
+      const payload = {
         phongId: selectedRoom.phongId,
         nguoiDungId: parseInt(user.userId),
         ngayDen: checkIn,
@@ -679,7 +805,11 @@ const HotelDetailPage = () => {
         phuongThucThanhToan: payMethod,
         soNguoiLon: guests,
         ghiChuKhach: guestNote || null,
-      });
+      };
+      if (couponPreview?.valid && (couponCode || '').trim()) {
+        payload.couponCode = (couponCode || '').trim();
+      }
+      const res = await axiosClient.post('/bookings/create', payload);
       // Nếu thanh toán online (VNPAY / MoMo) → chuyển sang bước thanh toán, chưa hiển thị màn hoàn tất
       if (payMethod === 'VNPAY' || payMethod === 'MoMo') {
         navigate(`/booking?bookingId=${res.data.id}&method=${payMethod}`);
@@ -699,7 +829,16 @@ const HotelDetailPage = () => {
     setTimeout(() => setToastMsg(null), 4000);
   };
 
-  const soNgay = nights(checkIn, checkOut);
+  /** Đã tìm phòng và API trả về 0 phòng — không hiển thị danh sách phòng để đặt */
+  const soldOut = searched && availableRooms.length === 0;
+
+  const grossTotal = selectedRoom ? Number(selectedRoom.tongTienDuTinh || 0) : 0;
+  const discountAmt = couponPreview?.valid ? Number(couponPreview.discountAmount || 0) : 0;
+  const netTotal = Math.max(0, grossTotal - discountAmt);
+  const tiLeCocNum = selectedRoom ? Number(selectedRoom.tiLeCocKhachSan || 0) : 0;
+  const estCocAfter = selectedRoom && tiLeCocNum > 0
+    ? Math.round((netTotal * tiLeCocNum) / 100)
+    : (selectedRoom ? Number(selectedRoom.tienCocDuTinh || 0) : 0);
 
   // ── Loading / Error States ───────────────────────────────────────────
   if (loadingHotel) return (
@@ -732,6 +871,12 @@ const HotelDetailPage = () => {
           <p className="font-mono text-2xl font-bold text-blue-700">{bookingResult.maDatPhong}</p>
           <p className="text-sm text-gray-500 mt-1">{bookingResult.tenPhong} · {bookingResult.soNgay} đêm</p>
           <p className="text-lg font-semibold text-gray-800 mt-2">{fmt(bookingResult.thanhTien)}</p>
+          {Number(bookingResult.tienGiamCoupon) > 0 && (
+            <p className="text-sm text-emerald-700 mt-1">
+              Đã giảm {fmt(bookingResult.tienGiamCoupon)}
+              {bookingResult.maCoupon ? ` · Mã ${bookingResult.maCoupon}` : ''}
+            </p>
+          )}
         </div>
         <div className={`text-sm font-medium px-3 py-1.5 rounded-full inline-block mb-6
           ${bookingResult.trangThai === 'Confirmed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
@@ -970,7 +1115,7 @@ const HotelDetailPage = () => {
                 </select>
               </div>
               <div className="flex items-end">
-                <button type="button" onClick={searchRooms} disabled={searching}
+                <button type="button" onClick={() => searchRooms({ scroll: true })} disabled={searching}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 text-sm font-semibold transition disabled:opacity-60 flex items-center justify-center gap-2 motion-safe:transition-transform motion-safe:active:scale-[0.98]">
                   <IconSearch className="w-4 h-4 opacity-90" />
                   {searching ? 'Đang tìm...' : 'Tìm phòng'}
@@ -985,13 +1130,25 @@ const HotelDetailPage = () => {
             )}
           </div>
 
-          {/* Available Room Cards */}
-          {searched && (
+          {/* Available Room Cards — chỉ hiện khi còn phòng; hết phòng: một thông báo rõ ràng, không list card */}
+          {searched && soldOut && (
+            <div className="motion-safe:animate-fade-in-up rounded-2xl border-2 border-dashed border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50/80 p-8 text-center shadow-sm ring-1 ring-amber-100/80">
+              <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-4">
+                <IconAlert className="w-9 h-9 text-amber-700" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Đã hết phòng</h2>
+              <p className="text-sm text-gray-600 max-w-md mx-auto leading-relaxed">
+                Không còn phòng trống cho <strong>{soNgay}</strong> đêm từ <strong>{checkIn}</strong> đến <strong>{checkOut}</strong>.
+                Vui lòng chọn ngày khác hoặc xem khách sạn khác.
+              </p>
+            </div>
+          )}
+          {searched && !soldOut && (
             <div className="motion-safe:animate-fade-in-up opacity-0 [animation-fill-mode:forwards] motion-safe:delay-75">
               <h2 className="text-lg font-bold text-gray-800 mb-3">
                 {availableRooms.length > 0
                   ? `${availableRooms.length} phòng trống · ${soNgay} đêm`
-                  : 'Không có phòng trống'}
+                  : ''}
               </h2>
               <div className="space-y-4">
                 {availableRooms.map(room => {
@@ -1022,12 +1179,7 @@ const HotelDetailPage = () => {
                                 {room.soGiuong && <span>{room.soGiuong} giường{room.loaiGiuong ? ` · ${room.loaiGiuong}` : ''}</span>}
                                 {room.soKhach && <span>Tối đa {room.soKhach} khách</span>}
                               </div>
-                              <div className="flex flex-wrap gap-1.5 mt-3">
-                                {amenities.slice(0, 5).map(a => <AmenityBadge key={a} name={a} />)}
-                                {amenities.length > 5 && (
-                                  <span className="text-xs text-gray-400">+{amenities.length - 5} nữa</span>
-                                )}
-                              </div>
+                              <AmenityList amenities={amenities} />
                               <div className="mt-2">
                                 <PolicyBadge
                                   choPhepHuy={room.choPhepHuy}
@@ -1089,11 +1241,54 @@ const HotelDetailPage = () => {
           <div className="glass rounded-[2rem] p-6 lg:p-8 sticky top-24 z-20 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white/80 backdrop-blur-xl">
             <h3 className="text-xl font-extrabold text-slate-800 mb-6 text-center tracking-tight">Chi tiết đặt phòng</h3>
 
+            {/* Gợi ý mã: nền tảng + khách sạn này */}
+            {((publicCoupons.platformDiscounts?.length || 0) + (publicCoupons.hotelPromotions?.length || 0)) > 0 && (
+              <div className="mb-5 rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 to-teal-50/70 p-4 shadow-sm">
+                <p className="text-xs font-bold text-emerald-900 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <IconSparkles className="w-4 h-4 text-emerald-600" />
+                  Đang có ưu đãi
+                </p>
+                {publicCoupons.platformDiscounts?.length > 0 && (
+                  <p className="text-[11px] font-semibold text-slate-600 mb-1.5">Toàn hệ thống</p>
+                )}
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {(publicCoupons.platformDiscounts || []).map((d) => (
+                    <span
+                      key={`pf-${d.code}`}
+                      className="inline-flex items-center gap-1 rounded-lg bg-white/90 px-2 py-1 text-[11px] font-medium text-emerald-900 ring-1 ring-emerald-200/80"
+                      title={d.ten || d.code}
+                    >
+                      <span className="font-mono font-bold">{d.code}</span>
+                      <span className="text-emerald-700">· {offerLabel(d)}</span>
+                    </span>
+                  ))}
+                </div>
+                {publicCoupons.hotelPromotions?.length > 0 && (
+                  <p className="text-[11px] font-semibold text-slate-600 mb-1.5">Tại khách sạn này</p>
+                )}
+                <div className="flex flex-wrap gap-1.5">
+                  {(publicCoupons.hotelPromotions || []).map((p) => (
+                    <span
+                      key={`hp-${p.code}`}
+                      className="inline-flex items-center gap-1 rounded-lg bg-white/90 px-2 py-1 text-[11px] font-medium text-teal-900 ring-1 ring-teal-200/80"
+                      title={p.ten || p.code}
+                    >
+                      <span className="font-mono font-bold">{p.code}</span>
+                      <span className="text-teal-800">· {offerLabel(p)}</span>
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  Nhập một mã bên dưới khi đặt (mã nền tảng hoặc mã của khách sạn). Không cộng dồn nhiều mã.
+                </p>
+              </div>
+            )}
+
             {/* Quick search in sidebar */}
             {!searched && (
               <div className="mb-4 p-3 bg-blue-50 rounded-xl text-center text-sm text-blue-700">
                 <p className="font-medium">Chọn ngày để xem phòng trống</p>
-                <button onClick={searchRooms} disabled={searching}
+                <button onClick={() => searchRooms({ scroll: true })} disabled={searching}
                   className="mt-2 bg-blue-600 text-white text-xs px-4 py-1.5 rounded-lg hover:bg-blue-700 transition font-semibold">
                   {searching ? 'Đang tìm...' : 'Tìm phòng ngay'}
                 </button>
@@ -1101,7 +1296,13 @@ const HotelDetailPage = () => {
             )}
 
             {/* Room summary */}
-            {selectedRoom ? (
+            {soldOut && (
+              <div className="mb-5 rounded-xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-900">
+                <p className="font-semibold">Không thể đặt — đã hết phòng</p>
+                <p className="text-xs text-red-800/90 mt-1">Đổi ngày nhận / trả phòng ở trên rồi bấm &quot;Tìm phòng&quot; lại.</p>
+              </div>
+            )}
+            {selectedRoom && !soldOut ? (
               <div className="bg-blue-50 rounded-xl p-4 mb-5 space-y-2">
                 <p className="font-semibold text-blue-800">{selectedRoom.tenLoaiPhong}</p>
                 <p className="text-sm text-gray-600">Phòng {selectedRoom.soPhong || selectedRoom.maPhong}</p>
@@ -1123,14 +1324,57 @@ const HotelDetailPage = () => {
                   <span className="font-semibold text-gray-700">Tổng dự kiến</span>
                   <span className="text-xl font-bold text-blue-700">{fmt(selectedRoom.tongTienDuTinh)}</span>
                 </div>
+                {/* Mã giảm giá / khuyến mãi */}
+                <div className={`border-t border-blue-100 pt-3 mt-2 space-y-2 ${soldOut ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <label className="block text-xs font-semibold text-gray-600">Mã giảm giá hoặc khuyến mãi</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={couponCode}
+                      onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponPreview(null); }}
+                      placeholder="VD: SUMMER2026"
+                      disabled={soldOut}
+                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono uppercase placeholder:normal-case placeholder:font-sans focus:ring-2 focus:ring-blue-400 outline-none disabled:bg-gray-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={applyCoupon}
+                      disabled={couponApplying || !selectedRoom || soldOut}
+                      className="shrink-0 px-3 py-2 text-xs font-bold rounded-lg bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {couponApplying ? '…' : 'Áp dụng'}
+                    </button>
+                  </div>
+                  {couponPreview && (
+                    <p className={`text-xs ${couponPreview.valid ? 'text-emerald-700' : 'text-red-600'}`}>
+                      {couponPreview.valid
+                        ? <>Đã áp dụng · Giảm <strong>{fmt(couponPreview.discountAmount)}</strong> ({couponPreview.kind === 'DISCOUNT' ? 'mã nền tảng' : 'mã khách sạn'})</>
+                        : (couponPreview.message || 'Mã không hợp lệ')}
+                    </p>
+                  )}
+                </div>
+                {couponPreview?.valid && discountAmt > 0 && (
+                  <>
+                    <div className="flex justify-between text-sm pt-1">
+                      <span className="text-emerald-800">Giảm giá</span>
+                      <span className="font-semibold text-emerald-700">−{fmt(discountAmt)}</span>
+                    </div>
+                    <div className="border-t border-blue-100 pt-2 flex justify-between items-center">
+                      <span className="font-semibold text-gray-800">Tổng sau giảm</span>
+                      <span className="text-xl font-bold text-emerald-800">{fmt(netTotal)}</span>
+                    </div>
+                  </>
+                )}
                 {/* Deposit Info */}
                 {selectedRoom.tienCocDuTinh > 0 && (
                   <div className="border-t border-orange-100 pt-2 mt-1">
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-semibold text-orange-700">Tiền cọc ({selectedRoom.tiLeCocKhachSan}%)</span>
-                      <span className="text-base font-bold text-orange-600">{fmt(selectedRoom.tienCocDuTinh)}</span>
+                      <span className="text-base font-bold text-orange-600">
+                        {fmt(couponPreview?.valid ? estCocAfter : selectedRoom.tienCocDuTinh)}
+                      </span>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">Áp dụng cho mọi hình thức thanh toán. Số còn lại thanh toán tại khách sạn.</p>
+                    <p className="text-xs text-gray-400 mt-1">Cần thanh toán online qua VNPAY ngay khi đặt. Số còn lại thanh toán tại khách sạn.</p>
                   </div>
                 )}
                 <PolicyBadge
@@ -1138,6 +1382,10 @@ const HotelDetailPage = () => {
                   mienPhiHuyTruocGio={selectedRoom.mienPhiHuyTruocGio}
                   phiHuyPct={selectedRoom.phiHuyPct}
                 />
+              </div>
+            ) : soldOut ? (
+              <div className="border-2 border-dashed border-amber-200 rounded-xl p-6 mb-5 text-center text-amber-900/80 bg-amber-50/50">
+                <p className="text-sm font-medium">Chưa chọn phòng — hiện không còn phòng trống cho ngày đã chọn</p>
               </div>
             ) : (
               <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 mb-5 text-center text-gray-400">
@@ -1149,16 +1397,27 @@ const HotelDetailPage = () => {
 
 
             {/* Payment method */}
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-gray-500 mb-2">Phương thức thanh toán</label>
-              <select value={payMethod} onChange={e => setPayMethod(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none">
-                <option value="TienMat">Tiền mặt tại quầy</option>
-                <option value="ChuyenKhoan">Chuyển khoản ngân hàng</option>
-                <option value="VNPAY">VNPAY</option>
-                <option value="MoMo">MoMo</option>
-              </select>
-            </div>
+            {(() => {
+              const hasDeposit = selectedRoom && Number(selectedRoom.tienCocDuTinh || 0) > 0;
+              return (
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold text-gray-500 mb-2">Phương thức thanh toán</label>
+                  {hasDeposit ? (
+                    <div className="w-full border border-orange-300 bg-orange-50 rounded-lg px-3 py-2 text-sm text-orange-700 font-semibold flex items-center gap-2">
+                      <span>💳</span> VNPAY (bắt buộc khi có tiền cọc)
+                    </div>
+                  ) : (
+                    <select value={payMethod} onChange={e => setPayMethod(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none">
+                      <option value="TienMat">Tiền mặt tại quầy</option>
+                      <option value="ChuyenKhoan">Chuyển khoản ngân hàng</option>
+                      <option value="VNPAY">VNPAY</option>
+                      <option value="MoMo">MoMo</option>
+                    </select>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Notes */}
             <div className="mb-5">
@@ -1171,9 +1430,9 @@ const HotelDetailPage = () => {
             {/* Book button */}
             {user ? (
               <button onClick={handleBook}
-                disabled={!selectedRoom || booking}
+                disabled={!selectedRoom || booking || soldOut}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg">
-                {booking ? 'Đang xử lý...' : 'Đặt phòng ngay'}
+                {booking ? 'Đang xử lý...' : soldOut ? 'Hết phòng' : 'Đặt phòng ngay'}
               </button>
             ) : (
               <button onClick={() => navigate('/login', { state: { from: window.location.pathname } })}

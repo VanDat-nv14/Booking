@@ -40,6 +40,7 @@ public class AdminController {
     private final KhachSanRepository khachSanRepository;
     private final ChiTietSuDungDVRepository ctsdRepository;
     private final PhuThuRepository phuThuRepository;
+    private final com.example.bookingkhachsan.service.BookingService bookingService;
 
     // ── Request DTO ──────────────────────────────
     @Data
@@ -86,8 +87,8 @@ public class AdminController {
 
     // ── GET all bookings ─────────────────────────
     @GetMapping("/bookings")
-    public ResponseEntity<List<com.example.bookingkhachsan.entity.PhieuDatPhong>> getAllBookings() {
-        return ResponseEntity.ok(bookingRepository.findAllByOrderByNgayDatDesc());
+    public ResponseEntity<List<BookingDto.BookingResponse>> getAllBookings() {
+        return ResponseEntity.ok(bookingService.getAllBookings());
     }
 
     // ── GET Báo Cáo Doanh Thu ────────────────────

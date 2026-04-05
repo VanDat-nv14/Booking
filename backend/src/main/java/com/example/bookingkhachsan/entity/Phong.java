@@ -31,10 +31,6 @@ public class Phong {
     @JoinColumn(name = "loai_phong_id", nullable = false)
     private LoaiPhong loaiPhong;
 
-    @ManyToOne
-    @JoinColumn(name = "khuyen_mai_id")
-    private KhuyenMai khuyenMai;
-
     @Column(name = "trang_thai")
     private String trangThai = "Trong";
 

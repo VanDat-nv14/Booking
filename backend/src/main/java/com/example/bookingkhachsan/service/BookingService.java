@@ -10,6 +10,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -40,9 +42,23 @@ public class BookingService {
     private final JdbcTemplate jdbcTemplate;
     private final EmailService emailService;
     private final SystemNotificationService systemNotificationService;
+    private final CouponApplicationService couponApplicationService;
+    private final LoyaltyService loyaltyService;
 
     // Hoa hong mac dinh 5% neu la mo hinh san
     private static final BigDecimal COMMISSION_RATE = new BigDecimal("0.05");
+
+    /** Thông báo in-app (PRIVATE) cho khách; bỏ qua nếu không có email. */
+    private void notifyGuestInApp(NguoiDung nd, String title, String content, String loai) {
+        if (nd == null || nd.getEmail() == null || nd.getEmail().isBlank()) {
+            return;
+        }
+        try {
+            systemNotificationService.createDirectNotification(nd.getEmail(), title, content, loai);
+        } catch (Exception e) {
+            log.warn("Không thể gửi thông báo in-app: {}", e.getMessage());
+        }
+    }
 
     // =====================================================
     // KIEM TRA PHONG TRONG (AVAILABILITY)
@@ -53,7 +69,7 @@ public class BookingService {
      * Su dung bang phong_kha_dung de kiem tra, khong dua vao trung booking.
      */
     public List<BookingDto.AvailableRoomResponse> getAvailableRooms(
-            Integer khachSanId, LocalDate checkIn, LocalDate checkOut, Integer loaiPhongId) {
+            Integer khachSanId, LocalDate checkIn, LocalDate checkOut, Integer loaiPhongId, Integer soKhach) {
 
         validateDateRange(checkIn, checkOut);
         long soNgay = ChronoUnit.DAYS.between(checkIn, checkOut);
@@ -69,18 +85,32 @@ public class BookingService {
                     .filter(p -> p.getLoaiPhong().getId().equals(loaiPhongId))
                     .collect(Collectors.toList());
         }
+        if (soKhach != null) {
+            phongs = phongs.stream()
+                    .filter(p -> {
+                        Integer cap = p.getSoKhach() != null ? p.getSoKhach()
+                                : (p.getLoaiPhong() != null ? p.getLoaiPhong().getSoKhach() : null);
+                        return cap == null || cap >= soKhach;
+                    })
+                    .collect(Collectors.toList());
+        }
 
         return phongs.stream().map(phong -> {
             LoaiPhong lp = phong.getLoaiPhong();
             BigDecimal giaTien = tinhGiaDong(phong.getGiaTien(), lp, checkIn, checkOut);
             BigDecimal tongTien = giaTien.multiply(BigDecimal.valueOf(soNgay));
-            // Doc ti le coc tu khach san
+            // Doc ti le coc va nguong coc tu khach san
             BigDecimal tiLeCoc = BigDecimal.ZERO;
-            if (phong.getKhachSan() != null && phong.getKhachSan().getTiLeCoc() != null) {
-                tiLeCoc = phong.getKhachSan().getTiLeCoc();
+            BigDecimal nguongCoc = BigDecimal.ZERO;
+            if (phong.getKhachSan() != null) {
+                if (phong.getKhachSan().getTiLeCoc() != null) tiLeCoc = phong.getKhachSan().getTiLeCoc();
+                if (phong.getKhachSan().getNguongCoc() != null) nguongCoc = phong.getKhachSan().getNguongCoc();
             }
-            BigDecimal tienCocDuTinh = tongTien.multiply(tiLeCoc)
-                    .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
+            // Chi ap dung coc khi tong tien >= nguong coc
+            boolean apDungCoc = tongTien.compareTo(nguongCoc) >= 0;
+            BigDecimal tienCocDuTinh = apDungCoc
+                    ? tongTien.multiply(tiLeCoc).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
             return BookingDto.AvailableRoomResponse.builder()
                     .phongId(phong.getId())
                     .tenPhong(phong.getTen())
@@ -144,6 +174,17 @@ public class BookingService {
         Phong phong = phongRepo.findById(request.getPhongId())
                 .orElseThrow(() -> new RuntimeException("Khong tim thay phong!"));
 
+        // Dọn sạch các Pending booking đã hết hạn đang giữ phòng (tránh kẹt TamGiu)
+        List<PhieuDatPhong> staleBookings = phongKhaDungRepo.findPendingBookingsBlockingRoom(
+                request.getPhongId(), request.getNgayDen(), request.getNgayDi());
+        for (PhieuDatPhong stale : staleBookings) {
+            if (stale.getPendingExpiresAt() != null
+                    && stale.getPendingExpiresAt().isBefore(LocalDateTime.now())) {
+                expireBooking(stale.getId());
+                log.info("Auto-expired stale booking {} before creating new one.", stale.getMaDatPhong());
+            }
+        }
+
         // Kiem tra overbooking qua phong_kha_dung
         long blocked = phongKhaDungRepo.countUnavailableDays(
                 request.getPhongId(), request.getNgayDen(), request.getNgayDi(), null);
@@ -170,6 +211,41 @@ public class BookingService {
                 request.getNgayDen(), request.getNgayDi());
         BigDecimal thanhTien = giaDong.multiply(BigDecimal.valueOf(soNgay));
 
+        Integer hotelId = phong.getKhachSan() != null ? phong.getKhachSan().getId() : null;
+        Integer loaiPhongId = lp != null ? lp.getId() : null;
+
+        CouponApplicationService.CouponPlan couponPlan = null;
+        String couponNguon = null;
+        String couponRefId = null;
+        String maCoupon = null;
+        BigDecimal tienGiamCoupon = null;
+        if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
+            try {
+                couponPlan = couponApplicationService.prepareLocked(
+                        request.getCouponCode(),
+                        request.getNguoiDungId(),
+                        hotelId,
+                        loaiPhongId,
+                        soNgay,
+                        thanhTien);
+            } catch (IllegalArgumentException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+            tienGiamCoupon = couponPlan.discountAmount();
+            maCoupon = couponPlan.codeSnapshot();
+            if (couponPlan.sourceType() == CouponApplicationService.SourceType.DISCOUNT) {
+                couponNguon = "DISCOUNT";
+                couponRefId = couponPlan.discount().getId();
+            } else {
+                couponNguon = "PROMO_CODE";
+                couponRefId = couponPlan.promotionCode().getId();
+            }
+            thanhTien = thanhTien.subtract(tienGiamCoupon);
+            if (thanhTien.compareTo(BigDecimal.ZERO) < 0) {
+                thanhTien = BigDecimal.ZERO;
+            }
+        }
+
         // Tao phieu dat phong
         PhieuDatPhong booking = new PhieuDatPhong();
         // Sinh ma dat phong trong Java de tranh loi "null identifier" tren SQL Server + trigger
@@ -190,13 +266,18 @@ public class BookingService {
         booking.setPendingExpiresAt(LocalDateTime.now().plusMinutes(30));
 
 
-        // Tinh tien coc dua tren ti le coc cua khach san
+        // Tinh tien coc dua tren ti le coc va nguong coc cua khach san
         BigDecimal tiLeCoc = BigDecimal.ZERO;
-        if (phong.getKhachSan() != null && phong.getKhachSan().getTiLeCoc() != null) {
-            tiLeCoc = phong.getKhachSan().getTiLeCoc();
+        BigDecimal nguongCoc = BigDecimal.ZERO;
+        if (phong.getKhachSan() != null) {
+            if (phong.getKhachSan().getTiLeCoc() != null) tiLeCoc = phong.getKhachSan().getTiLeCoc();
+            if (phong.getKhachSan().getNguongCoc() != null) nguongCoc = phong.getKhachSan().getNguongCoc();
         }
-        BigDecimal tienCoc = thanhTien.multiply(tiLeCoc)
-                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
+        // Chi ap dung coc khi tong tien >= nguong coc
+        boolean apDungCoc = thanhTien.compareTo(nguongCoc) >= 0;
+        BigDecimal tienCoc = apDungCoc
+                ? thanhTien.multiply(tiLeCoc).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
         booking.setTienCoc(tienCoc);
         booking.setTrangThaiCoc("ChuaCoc");
 
@@ -211,8 +292,9 @@ public class BookingService {
                 "  ma_dat_phong, ngay_den, ngay_di, nguoi_dung_id, phong_id," +
                 "  gia_phong_goc, thanh_tien, trang_thai, trang_thai_thanh_toan," +
                 "  loai_dat_phong, phuong_thuc_thanh_toan, so_nguoi_lon, so_tre_em," +
-                "  ghi_chu_khach, pending_expires_at, tien_coc, trang_thai_coc" +
-                ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "  ghi_chu_khach, pending_expires_at, tien_coc, trang_thai_coc," +
+                "  coupon_nguon, coupon_ref_id, ma_coupon, tien_giam_coupon" +
+                ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 maDatPhong,
                 booking.getNgayDen(),
                 booking.getNgayDi(),
@@ -229,7 +311,11 @@ public class BookingService {
                 booking.getGhiChuKhach(),
                 booking.getPendingExpiresAt(),
                 booking.getTienCoc(),
-                booking.getTrangThaiCoc()
+                booking.getTrangThaiCoc(),
+                couponNguon,
+                couponRefId,
+                maCoupon,
+                tienGiamCoupon
         );
 
         // Lay ID vua duoc INSERT. Dung @@IDENTITY de lay ID bat ke trigger co INSTEAD OF hay khong.
@@ -245,12 +331,43 @@ public class BookingService {
         PhieuDatPhong savedBooking = bookingRepo.findById(newId)
                 .orElseThrow(() -> new RuntimeException("Loi he thong: Khong tim thay phieu sau khi tao!"));
 
+        if (couponPlan != null) {
+            couponApplicationService.finalizeAfterBooking(couponPlan, savedBooking, user);
+        }
+
         // Giu phong tam thoi (TamGiu) cho tat ca ngay trong khoang dat
         initPhongKhaDung(phong, savedBooking, request.getNgayDen(), request.getNgayDi(), giaDong);
 
-        // Neu dat ngay (InstantBooking): tu dong confirm
+        // Neu dat ngay (InstantBooking): tu dong confirm (se gui thong bao qua doConfirm)
         if ("InstantBooking".equals(request.getLoaiDatPhong())) {
             savedBooking = doConfirm(savedBooking);
+        } else {
+            // RequestToBook: Thong bao cho quan ly KS co don moi can xac nhan
+            NguoiDung ql = phong.getKhachSan() != null ? phong.getKhachSan().getNguoiQuanLy() : null;
+            final String managerEmail = (ql != null && ql.getEmail() != null) ? ql.getEmail().trim() : null;
+            final String guestName = user.getHoTen() != null ? user.getHoTen() : "Khách";
+            final String maDatNew = savedBooking.getMaDatPhong();
+            final String tenPhongNew = phong.getTen();
+            final String tenKSNew = phong.getKhachSan() != null ? phong.getKhachSan().getTen() : "N/A";
+            final String ngayDenStr = request.getNgayDen().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            final String ngayDiStr = request.getNgayDi().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+
+            if (managerEmail != null && !managerEmail.isBlank()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        try {
+                            String content = String.format(
+                                    "Mã %s — Khách: %s — Phòng %s tại %s (nhận %s, trả %s). Đang chờ xác nhận.",
+                                    maDatNew, guestName, tenPhongNew, tenKSNew, ngayDenStr, ngayDiStr);
+                            systemNotificationService.createDirectNotification(
+                                    managerEmail, "Có đơn đặt phòng mới cần xác nhận", content, "INFO");
+                        } catch (Exception e) {
+                            log.warn("Khong the gui thong bao don moi cho quan ly {}: {}", managerEmail, e.getMessage());
+                        }
+                    }
+                });
+            }
         }
 
         return toBookingResponse(savedBooking);
@@ -301,35 +418,66 @@ public class BookingService {
         // Trigger trg_OnBookingStatusChange se tu chuyen TamGiu → DaDat
         log.info("Booking {} confirmed.", booking.getMaDatPhong());
 
-        // Extract du lieu ngay trong transaction (tranh LazyInitializationException trong @Async)
-        try {
-            NguoiDung nd = booking.getNguoiDung();
-            Phong phong  = booking.getPhong();
-            String toEmail    = (nd != null) ? nd.getEmail()  : null;
-            String hoTen      = (nd != null && nd.getHoTen() != null) ? nd.getHoTen() : "Quý khách";
-            String maDat      = booking.getMaDatPhong() != null ? booking.getMaDatPhong() : String.valueOf(booking.getId());
-            String tenPhong   = (phong != null) ? phong.getTen() : "N/A";
-            String tenKS      = (phong != null && phong.getKhachSan() != null) ? phong.getKhachSan().getTen() : "N/A";
-            String ngayDen    = booking.getNgayDen() != null ? booking.getNgayDen().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "N/A";
-            String ngayDi     = booking.getNgayDi()  != null ? booking.getNgayDi().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))  : "N/A";
-            String thanhTien  = booking.getThanhTien() != null ? String.format("%,.0f VNĐ", booking.getThanhTien()) : "N/A";
+        // Chuẩn bị dữ liệu ngay trong phiên (tránh lazy sau khi đóng session)
+        NguoiDung nd = booking.getNguoiDung();
+        Phong phong = booking.getPhong();
+        final String toEmail = (nd != null) ? nd.getEmail() : null;
+        final String hoTen = (nd != null && nd.getHoTen() != null) ? nd.getHoTen() : "Quý khách";
+        final String maDat = booking.getMaDatPhong() != null ? booking.getMaDatPhong() : String.valueOf(booking.getId());
+        final String tenPhong = (phong != null) ? phong.getTen() : "N/A";
+        final String tenKS = (phong != null && phong.getKhachSan() != null) ? phong.getKhachSan().getTen() : "N/A";
+        final String ngayDen = booking.getNgayDen() != null
+                ? booking.getNgayDen().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "N/A";
+        final String ngayDi = booking.getNgayDi() != null
+                ? booking.getNgayDi().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "N/A";
+        final String thanhTien = booking.getThanhTien() != null
+                ? String.format("%,.0f VNĐ", booking.getThanhTien()) : "N/A";
+        final String notifTitle = "Đơn đặt phòng đã được xác nhận";
+        final String notifContent = String.format("Mã đơn %s tại %s (%s) đã được xác nhận thành công.",
+                booking.getMaDatPhong(), tenKS, tenPhong);
 
-            emailService.sendBookingConfirmationEmail(toEmail, hoTen, maDat, tenKS, tenPhong, ngayDen, ngayDi, thanhTien);
-        } catch (Exception e) {
-            log.error("Khong the gui email xac nhan booking {}: {}", booking.getMaDatPhong(), e.getMessage());
-        }
+        NguoiDung ql = (phong != null && phong.getKhachSan() != null)
+                ? phong.getKhachSan().getNguoiQuanLy() : null;
+        final String managerEmail = (ql != null && ql.getEmail() != null) ? ql.getEmail().trim() : null;
 
-        // Gửi thông báo đẩy (In-app) cho khách hàng
-        try {
-            String title = "Đơn đặt phòng đã được xác nhận";
-            String content = String.format("Mã đơn %s tại %s (%s) đã được xác nhận thành công.", 
-                    booking.getMaDatPhong(), 
-                    booking.getPhong().getKhachSan().getTen(),
-                    booking.getPhong().getTen());
-            systemNotificationService.createDirectNotification(booking.getNguoiDung().getEmail(), title, content, "INFO");
-        } catch (Exception e) {
-            log.warn("Khong the gui thong bao day cho booking {}: {}", booking.getMaDatPhong(), e.getMessage());
-        }
+        // Gửi mail + in-app sau khi transaction commit thành công — tránh 500 do side-effect làm rollback,
+        // và không gửi mail nếu lưu đơn/ trigger DB thất bại.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    if (toEmail != null && !toEmail.isBlank()) {
+                        emailService.sendBookingConfirmationEmail(
+                                toEmail, hoTen, maDat, tenKS, tenPhong, ngayDen, ngayDi, thanhTien);
+                    }
+                } catch (Exception e) {
+                    log.error("Khong the gui email xac nhan booking {}: {}", maDat, e.getMessage());
+                }
+                try {
+                    if (toEmail != null && !toEmail.isBlank()) {
+                        systemNotificationService.createDirectNotification(toEmail, notifTitle, notifContent, "INFO");
+                    }
+                } catch (Exception e) {
+                    log.warn("Khong the gui thong bao day sau commit cho {}: {}", maDat, e.getMessage());
+                }
+                /* Thông báo cho quản lý KS (chuông trên dashboard); trước đây chỉ gửi khách nên manager không thấy gì. */
+                try {
+                    if (managerEmail != null && !managerEmail.isBlank()) {
+                        boolean sameAsGuest = toEmail != null
+                                && managerEmail.equalsIgnoreCase(toEmail.trim());
+                        if (!sameAsGuest) {
+                            String mgrContent = String.format(
+                                    "Mã %s — Khách: %s — Phòng %s tại %s (nhận %s, trả %s).",
+                                    maDat, hoTen, tenPhong, tenKS, ngayDen, ngayDi);
+                            systemNotificationService.createDirectNotification(
+                                    managerEmail, "Đơn đặt phòng đã xác nhận", mgrContent, "INFO");
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Khong the gui thong bao cho quan ly KS sau commit {}: {}", maDat, e.getMessage());
+                }
+            }
+        });
 
         return booking;
     }
@@ -363,8 +511,8 @@ public class BookingService {
         booking.setTrangThai("Expired");
         booking.setTrangThaiThanhToan("Huy");
         bookingRepo.save(booking);
-        // Trigger se tu giai phong phong_kha_dung → Trong
-        log.info("Booking {} expired.", booking.getMaDatPhong());
+        phongKhaDungRepo.releaseRoomByBookingId(bookingId);
+        log.info("Booking {} expired, room released.", booking.getMaDatPhong());
     }
 
     // =====================================================
@@ -382,9 +530,9 @@ public class BookingService {
         // Gửi thông báo đẩy cho khách hàng
         try {
             String title = "Đơn đặt phòng bị từ chối";
-            String content = String.format("Mã đơn %s đã bị từ chối. Lý do: %s", 
+            String content = String.format("Mã đơn %s đã bị từ chối. Lý do: %s",
                     booking.getMaDatPhong(), ghiChu);
-            systemNotificationService.createDirectNotification(booking.getNguoiDung().getEmail(), title, content, "SYSTEM");
+            notifyGuestInApp(booking.getNguoiDung(), title, content, "SYSTEM");
         } catch (Exception e) {
             log.warn("Khong the gui thong bao tu choi cho booking {}: {}", booking.getMaDatPhong(), e.getMessage());
         }
@@ -433,6 +581,7 @@ public class BookingService {
         booking.setTrangThaiThanhToan(soTienHoan.compareTo(BigDecimal.ZERO) > 0 ? "DaHoanTien" : "Huy");
         booking.setGhiChuHuy(ghiChuHuy);
         bookingRepo.save(booking);
+        phongKhaDungRepo.releaseRoomByBookingId(booking.getId());
 
         // Ghi lich su hoan tien
         String executor = getCurrentUserEmail();
@@ -465,7 +614,7 @@ public class BookingService {
         try {
             String title = "Bạn đã Check-in thành công";
             String content = "Chào mừng bạn đến với " + booking.getPhong().getKhachSan().getTen() + ". Chúc bạn có một kỳ nghỉ tuyệt vời!";
-            systemNotificationService.createDirectNotification(booking.getNguoiDung().getEmail(), title, content, "INFO");
+            notifyGuestInApp(booking.getNguoiDung(), title, content, "INFO");
         } catch (Exception e) { }
 
         return toBookingResponse(booking);
@@ -559,6 +708,13 @@ public class BookingService {
         booking.setTiLeHoaHong(COMMISSION_RATE.multiply(BigDecimal.valueOf(100)));
 
         bookingRepo.save(booking);
+        
+        // Award loyalty points (1 point per 10,000 VND)
+        try {
+            loyaltyService.awardPoints(booking.getNguoiDung().getId(), tongCuoi);
+        } catch (Exception e) {
+            log.warn("Failed to award loyalty points for booking {}: {}", booking.getMaDatPhong(), e.getMessage());
+        }
 
         // Ghi lich su
         saveLichSu(booking, tongCuoi, "ThanhToan",
@@ -572,7 +728,7 @@ public class BookingService {
         try {
             String title = "Bạn đã Check-out thành công";
             String content = "Cảm ơn bạn đã sử dụng dịch vụ tại " + booking.getPhong().getKhachSan().getTen() + ". Hẹn gặp lại bạn!";
-            systemNotificationService.createDirectNotification(booking.getNguoiDung().getEmail(), title, content, "INFO");
+            notifyGuestInApp(booking.getNguoiDung(), title, content, "INFO");
         } catch (Exception e) { }
 
         log.info("Booking {} checked out. Total: {}", booking.getMaDatPhong(), tongCuoi);
@@ -606,7 +762,25 @@ public class BookingService {
                 request.getGhiChu(), getCurrentUserEmail());
         booking.setTrangThaiThanhToan("DaThanhToan");
         bookingRepo.save(booking);
+
+        // Gửi thông báo xác nhận thanh toán cho khách
+        try {
+            NguoiDung nd = booking.getNguoiDung();
+            String soTienStr = request.getSoTien() != null
+                    ? String.format("%,.0f VNĐ", request.getSoTien()) : "N/A";
+            String title = "Thanh toán được ghi nhận";
+            String content = String.format(
+                    "Đơn %s đã ghi nhận thanh toán %s qua %s. Trạng thái: Đã thanh toán.",
+                    booking.getMaDatPhong(),
+                    soTienStr,
+                    request.getPhuongThuc() != null ? request.getPhuongThuc() : "N/A"
+            );
+            notifyGuestInApp(nd, title, content, "INFO");
+        } catch (Exception e) {
+            log.warn("Khong the gui thong bao thanh toan cho booking {}: {}", booking.getMaDatPhong(), e.getMessage());
+        }
     }
+
 
     public void addService(BookingDto.AddServiceRequest request) {
         PhieuDatPhong booking = findBookingById(request.getPhieuDatPhongId());
@@ -672,6 +846,13 @@ public class BookingService {
     public List<BookingDto.BookingResponse> getBookingsByHotel(Integer hotelId) {
         return bookingRepo.findByPhong_KhachSan_IdOrderByNgayDatDesc(hotelId)
                 .stream().map(this::toBookingResponse).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<BookingDto.BookingResponse> getAllBookings() {
+        return bookingRepo.findAllByOrderByNgayDatDesc().stream()
+                .map(this::toBookingResponse)
+                .collect(Collectors.toList());
     }
 
     public List<BookingDto.PaymentHistoryResponse> getPaymentHistory(Integer bookingId) {
@@ -897,7 +1078,7 @@ public class BookingService {
 
     /**
      * Gateway (VNPAY, MoMo, ...) báo thanh toán thành công cho một booking.
-     * Không thay đổi trạng thái booking (Pending/Confirmed ...) ngoài trường trangThaiThanhToan.
+     * Nếu booking đang Pending → tự động chuyển sang Confirmed (xác nhận đặt phòng).
      */
     @Transactional
     public BookingDto.BookingResponse updatePaymentStatusFromGateway(
@@ -929,7 +1110,13 @@ public class BookingService {
         lichSuRepo.save(ls);
 
         booking.setTrangThaiThanhToan("DaThanhToan");
-        bookingRepo.save(booking);
+
+        // Nếu đơn đang chờ (Pending) → xác nhận ngay sau khi thanh toán thành công
+        if ("Pending".equalsIgnoreCase(booking.getTrangThai())) {
+            booking = doConfirm(booking);
+        } else {
+            bookingRepo.save(booking);
+        }
 
         return toBookingResponse(booking);
     }
@@ -986,6 +1173,10 @@ public class BookingService {
                 .pendingExpiresAt(b.getPendingExpiresAt())
                 .ngayDat(b.getNgayDat())
                 .ghiChuKhach(b.getGhiChuKhach())
+                .couponNguon(b.getCouponNguon())
+                .couponRefId(b.getCouponRefId())
+                .maCoupon(b.getMaCoupon())
+                .tienGiamCoupon(b.getTienGiamCoupon())
                 .isReviewed(isReviewed)
                 .soSaoDanhGia(soSao)
                 .build();

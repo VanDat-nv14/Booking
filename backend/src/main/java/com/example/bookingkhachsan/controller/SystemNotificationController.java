@@ -59,6 +59,17 @@ public class SystemNotificationController {
     }
 
     /**
+     * PUT /api/system-notifications/read-all
+     * Đánh dấu tất cả thông báo là đã đọc.
+     */
+    @PutMapping("/read-all")
+    @PreAuthorize("hasAnyAuthority('ROLE_Admin', 'ROLE_HotelManager', 'ROLE_User')")
+    public ResponseEntity<Void> markAllNotificationsRead(@AuthenticationPrincipal NguoiDung currentUser) {
+        notificationService.markAllAsRead(currentUser.getEmail(), currentUser.getChucVu());
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
      * PUT /api/system-notifications/{id}/read
      * Đánh dấu đã đọc (Manager/User/Admin).
      */
@@ -119,6 +130,35 @@ public class SystemNotificationController {
     ) {
         return ResponseEntity.ok(
                 notificationService.cancelNotification(id, currentUser.getEmail()));
+    }
+
+    /**
+     * PUT /api/system-notifications/{id}
+     * Admin cập nhật thông báo.
+     */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_Admin')")
+    public ResponseEntity<SystemNotification> updateNotification(
+            @PathVariable String id,
+            @RequestBody SystemNotificationService.CreateNotificationRequest request,
+            @AuthenticationPrincipal NguoiDung currentUser
+    ) {
+        return ResponseEntity.ok(
+                notificationService.updateNotification(id, request, currentUser.getEmail()));
+    }
+
+    /**
+     * DELETE /api/system-notifications/{id}
+     * Admin xóa hoàn toàn thông báo.
+     */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_Admin')")
+    public ResponseEntity<Void> deleteNotification(
+            @PathVariable String id,
+            @AuthenticationPrincipal NguoiDung currentUser
+    ) {
+        notificationService.deleteNotification(id, currentUser.getEmail());
+        return ResponseEntity.noContent().build();
     }
 
     /**

@@ -44,6 +44,9 @@ public class HotelDto {
     /** Tỷ lệ phần trăm tiền cọc (0–100) */
     private java.math.BigDecimal tiLeCoc;
 
+    /** Ngưỡng tổng tiền đơn (VNĐ) để áp dụng cọc. Đơn dưới ngưỡng này không cọc. */
+    private java.math.BigDecimal nguongCoc;
+
     private Integer nguoiDungId;   // Manager optional
 
     /** URL ảnh bìa (ảnh chính) */

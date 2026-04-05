@@ -9,6 +9,11 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+/**
+ * Gửi email qua SMTP (Gmail). Cần {@code spring.mail.username/password} hợp lệ.
+ * Khác hẳn thông báo chuông trong app ({@link com.example.bookingkhachsan.entity.SystemNotification}):
+ * chuông gắn email tài khoản trong DB, không cần cấu hình Gmail để hiển thị.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -16,11 +21,22 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
 
-    private static final String FROM = "nvdat140104@gmail.com";
+    @org.springframework.beans.factory.annotation.Value("${spring.mail.username}")
+    private String fromEmail;
+
+    /** Chưa cấu hình MAIL_USERNAME thật (env) hoặc dùng placeholder mặc định. */
+    private boolean isMailConfigured() {
+        return fromEmail != null && !fromEmail.isBlank()
+                && !"placeholder".equalsIgnoreCase(fromEmail.trim());
+    }
 
     public void sendEmail(String to, String subject, String body) {
+        if (!isMailConfigured()) {
+            log.warn("Bo qua gui mail (chua cau hinh MAIL_USERNAME / Gmail SMTP): subject={}", subject);
+            return;
+        }
         SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(FROM);
+        message.setFrom(fromEmail);
         message.setTo(to);
         message.setSubject(subject);
         message.setText(body);
@@ -44,6 +60,11 @@ public class EmailService {
             String thanhTien) {
 
         try {
+            if (!isMailConfigured()) {
+                log.warn("Booking {} - khong gui mail: chua cau hinh MAIL_USERNAME / Gmail SMTP (xem application.properties).",
+                        maDatPhong);
+                return;
+            }
             if (toEmail == null || toEmail.isBlank()) {
                 log.warn("Booking {} - khong co email khach hang, bo qua gui mail.", maDatPhong);
                 return;
@@ -95,16 +116,16 @@ public class EmailService {
                         <p>Cảm ơn bạn đã tin tưởng sử dụng dịch vụ của chúng tôi! 🙏</p>
                       </div>
                       <div class="footer">
-                        © 2025 Booking Khách Sạn &nbsp;|&nbsp; nvdat140104@gmail.com
+                        © 2025 Booking Khách Sạn &nbsp;|&nbsp; %s
                       </div>
                     </div>
                     </body>
                     </html>
-                    """.formatted(hoTen, maDatPhong, tenKhachSan, tenPhong, ngayDen, ngayDi, thanhTien);
+                    """.formatted(hoTen, maDatPhong, tenKhachSan, tenPhong, ngayDen, ngayDi, thanhTien, fromEmail);
 
             MimeMessage mime = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mime, true, "UTF-8");
-            helper.setFrom(FROM);
+            helper.setFrom(fromEmail);
             helper.setTo(toEmail);
             helper.setSubject(subject);
             helper.setText(html, true);

@@ -37,6 +37,9 @@ public class BookingDto {
         private Integer soNguoiLon = 1;
         private Integer soTreEm  = 0;
         private String ghiChuKhach;
+
+        /** Một mã: discount nền tảng (Admin) hoặc promotion code (Manager KS) — không stack */
+        private String couponCode;
     }
 
     /** Kiem tra phong trong theo khoang ngay */
@@ -158,6 +161,12 @@ public class BookingDto {
         private LocalDateTime pendingExpiresAt;
         private LocalDateTime ngayDat;
         private String ghiChuKhach;
+
+        /** DISCOUNT | PROMO_CODE — snapshot mã áp dụng */
+        private String couponNguon;
+        private String couponRefId;
+        private String maCoupon;
+        private BigDecimal tienGiamCoupon;
     }
 
     /** Lich su thanh toan */

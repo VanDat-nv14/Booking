@@ -25,7 +25,7 @@ public class PromotionController {
      * Manager tạo nháp khuyến mãi.
      */
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('ROLE_HotelManager', 'ROLE_Admin')")
+    @PreAuthorize("hasAuthority('ROLE_HotelManager')")
     public ResponseEntity<Promotion> createDraft(
             @RequestBody PromotionService.CreatePromotionRequest request,
             @AuthenticationPrincipal NguoiDung currentUser

@@ -6,6 +6,14 @@ import { IconBuilding, IconMapPin, IconSparkles, IconShield, IconHeadset, IconSt
 
 const fmt = (n) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n || 0);
 
+const toLocalYmd = (d) => {
+  const x = new Date(d);
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, '0');
+  const day = String(x.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 const BACKEND = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:8080';
 
 // ── Motion Variants ────────────────────────────────────────────────────────
@@ -91,6 +99,21 @@ const HotelCard = ({ hotel }) => {
               </span>
             </div>
           )}
+
+          <div className="mb-3">
+            <span
+              className={`inline-flex text-xs font-bold px-2.5 py-1 rounded-lg ${
+                (hotel.soPhongTrong ?? 0) > 0
+                  ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80'
+                  : 'bg-red-50 text-red-700 ring-1 ring-red-200/80'
+              }`}
+              title="Số phòng trống đêm nay (nhận phòng hôm nay, trả sáng mai)"
+            >
+              {(hotel.soPhongTrong ?? 0) > 0
+                ? `${hotel.soPhongTrong} phòng trống (đêm nay)`
+                : 'Hết phòng (đêm nay)'}
+            </span>
+          </div>
           
           <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
             <div className="text-xs text-slate-500 flex flex-col">
@@ -144,9 +167,14 @@ const HomePage = () => {
     }).catch(() => {}).finally(() => setLoadingLocations(false));
   }, []);
 
-  // Load first 12 hotels
+  // Load first 12 hotels + số phòng trống đêm nay (check-in hôm nay, check-out mai)
   useEffect(() => {
-    axiosClient.get('/hotels/public', { params: { limit: 12 } }).then(res => {
+    const d0 = new Date();
+    const d1 = new Date();
+    d1.setDate(d1.getDate() + 1);
+    axiosClient.get('/hotels/public', {
+      params: { limit: 12, checkIn: toLocalYmd(d0), checkOut: toLocalYmd(d1) },
+    }).then(res => {
       setHotels(res.data || []);
     }).catch(() => {}).finally(() => setLoadingHotels(false));
   }, []);
@@ -327,6 +355,68 @@ const HomePage = () => {
           </motion.div>
         </div>
       </div>
+
+      {/* ── DESTINATIONS ── */}
+      {flatLocations.length > 0 && (
+        <div className="py-20 sm:py-24 bg-slate-50/50 overflow-hidden">
+          <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
+            <motion.div
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true, margin: "-100px" }}
+              variants={staggerContainer}
+            >
+              <motion.div variants={fadeInUp} className="text-center mb-12">
+                <p className="text-sm font-bold uppercase tracking-widest text-brand-600 mb-3">KHÁM PHÁ</p>
+                <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 font-display">Điểm Đến Nổi Bật</h2>
+                <p className="text-slate-500 mt-3">Chọn địa điểm yêu thích và bắt đầu hành trình của bạn</p>
+              </motion.div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+                {flatLocations.slice(0, 10).map((loc, i) => (
+                  <motion.button
+                    key={loc.id}
+                    variants={fadeInUp}
+                    type="button"
+                    onClick={() => {
+                      const params = new URLSearchParams();
+                      params.set('viTriId', loc.id);
+                      if (checkIn) params.set('checkIn', checkIn);
+                      if (checkOut) params.set('checkOut', checkOut);
+                      params.set('guests', guests);
+                      navigate(`/search?${params.toString()}`);
+                    }}
+                    className="group relative overflow-hidden rounded-2xl aspect-[4/3] bg-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+                  >
+                    {/* Gradient background */}
+                    <div className={`absolute inset-0 ${[
+                      'bg-gradient-to-br from-blue-400 to-indigo-600',
+                      'bg-gradient-to-br from-emerald-400 to-teal-600',
+                      'bg-gradient-to-br from-orange-400 to-rose-500',
+                      'bg-gradient-to-br from-violet-400 to-purple-600',
+                      'bg-gradient-to-br from-amber-400 to-orange-500',
+                      'bg-gradient-to-br from-cyan-400 to-blue-500',
+                      'bg-gradient-to-br from-pink-400 to-rose-600',
+                      'bg-gradient-to-br from-lime-400 to-green-600',
+                      'bg-gradient-to-br from-sky-400 to-cyan-600',
+                      'bg-gradient-to-br from-fuchsia-400 to-pink-600',
+                    ][i % 10]} group-hover:scale-105 transition-transform duration-500`} />
+                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-white">
+                      <IconMapPin className="w-6 h-6 mb-2 opacity-90" />
+                      <span className="font-bold text-sm sm:text-base text-center leading-tight drop-shadow">
+                        {loc.name.split(',')[0]}
+                      </span>
+                      <span className="text-xs opacity-80 mt-0.5 text-center">
+                        {loc.name.split(',').slice(1).join(',').trim()}
+                      </span>
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      )}
 
       {/* ── HOTEL LIST ── */}
       <div id="hotel-list" className="py-20 sm:py-28 bg-slate-50/50">

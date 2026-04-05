@@ -29,8 +29,10 @@ public interface SystemNotificationRepository extends JpaRepository<SystemNotifi
     /**
      * Khớp doiTuong với chucVu (Admin/HotelManager/User) và bản ghi cũ (ADMIN/HOTEL_MANAGER/USER).
      */
+    /** {@code :email} phải đã chuẩn hóa (trim + lower) ở tầng service để khớp {@code nguoi_nhan} khi so sánh. */
     @Query("SELECT n FROM SystemNotification n WHERE n.trangThai = 'SENT' AND ("
-            + "n.doiTuong = 'ALL' OR n.nguoiNhan = :email OR "
+            + "n.doiTuong = 'ALL' OR "
+            + "(n.nguoiNhan IS NOT NULL AND LOWER(TRIM(n.nguoiNhan)) = :email) OR "
             + "((n.doiTuong = 'Admin' OR n.doiTuong = 'ADMIN') AND (:role = 'Admin' OR :role = 'ADMIN')) OR "
             + "((n.doiTuong = 'HotelManager' OR n.doiTuong = 'HOTEL_MANAGER') "
             + "AND (:role = 'HotelManager' OR :role = 'HOTEL_MANAGER')) OR "

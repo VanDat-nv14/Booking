@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.AttributeConverter;
@@ -19,6 +20,7 @@ import java.util.List;
 @Entity
 @Table(name = "khach_san")
 @Data
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class KhachSan {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -72,6 +74,14 @@ public class KhachSan {
      */
     @Column(name = "ti_le_coc", precision = 5, scale = 2)
     private BigDecimal tiLeCoc = new BigDecimal("30.00");
+
+    /**
+     * Ngưỡng tổng tiền đơn (VNĐ) để áp dụng tiền cọc.
+     * Nếu tổng tiền phòng < nguongCoc thì không yêu cầu cọc.
+     * Mặc định 0 = luôn áp cọc.
+     */
+    @Column(name = "nguong_coc", precision = 15, scale = 2)
+    private BigDecimal nguongCoc = BigDecimal.ZERO;
 
 
     /** URL ảnh bìa (ảnh chính hiển thị cho khách) */

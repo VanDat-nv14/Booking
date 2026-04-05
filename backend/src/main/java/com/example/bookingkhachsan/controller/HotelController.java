@@ -1,6 +1,7 @@
 package com.example.bookingkhachsan.controller;
 
 import com.example.bookingkhachsan.dto.HotelDetailDto;
+import com.example.bookingkhachsan.dto.HotelSearchResultDto;
 import com.example.bookingkhachsan.entity.KhachSan;
 import com.example.bookingkhachsan.entity.NguoiDung;
 import com.example.bookingkhachsan.service.HotelService;
@@ -29,8 +30,12 @@ public class HotelController {
     }
 
     @GetMapping("/public")
-    public ResponseEntity<List<KhachSan>> getPublic(@RequestParam(required = false) Integer limit) {
-        return ResponseEntity.ok(service.getAll(limit));
+    public ResponseEntity<List<HotelSearchResultDto>> getPublic(
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) java.time.LocalDate checkIn,
+            @RequestParam(required = false) java.time.LocalDate checkOut
+    ) {
+        return ResponseEntity.ok(service.getPublicWithAvailability(limit, checkIn, checkOut));
     }
 
     @GetMapping("/my-hotel")
@@ -42,7 +47,7 @@ public class HotelController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<KhachSan>> search(
+    public ResponseEntity<List<HotelSearchResultDto>> search(
             @RequestParam(name = "viTriId", required = false) Integer viTriId,
             @RequestParam(name = "soSao", required = false) Integer soSao,
             @RequestParam(name = "minPrice", required = false) java.math.BigDecimal minPrice,
